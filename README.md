@@ -2,25 +2,31 @@
 
 Buzz 1.0.4에서 분리한 **사용자 ↔ AI 음성 대화 연결 코어**입니다.
 마이크 입력을 AI 음성 제공자에 보내고 응답 음성을 재생하는 계약과 수명을 관리합니다.
-기본 제공자는 원본처럼 **로컬 Codex 에이전트의 WebRTC 음성 기능**에 연결합니다.
+통화 화면에서 **Codex 또는 Claude를 선택**할 수 있습니다. 처음 선택값은 Codex이며, 이후에는 마지막 선택을 기억합니다.
 
 ## 실행
 
-Node.js 20.19 이상, 음성 기능을 지원하는 Codex CLI와 로그인된 계정이 필요합니다.
-저장소 루트에서 실행합니다.
+Node.js 20.19 이상과 사용할 AI의 설치·로그인이 필요합니다. 저장소 루트에서 실행합니다.
 
 ```sh
-codex login status
 npm ci
 npm run demo
 ```
 
-`http://127.0.0.1:4182/`에서 **Codex와 통화 시작**을 눌러 마이크 권한을 허용합니다.
-Codex의 기존 로그인으로 새 읽기 전용 대화를 열고 음성 응답과 발화문을 표시합니다.
-음소거·끼어들기·종료 버튼을 사용할 수 있습니다. 음성은 Codex의 실시간 서비스로 전송됩니다.
+`http://127.0.0.1:4184/`에서 **대화할 AI**를 고르고 **통화 시작**을 누릅니다.
+선택한 AI에 맞춰 연결 상태·음성 처리 안내와 통화 버튼이 바뀝니다. 통화 중에는 선택을 잠그며,
+종료 후 다른 AI로 바꿀 수 있습니다. 선택을 바꾸면 이전 연결과 화면의 대화 기록을 정리합니다.
 
-[Codex 연결 안내](docs/codex-voice.md)에 작업 폴더·CLI 경로·포트 변경과 프로토콜, 검증 범위를 정리했습니다.
-모델 없는 연결 테스트는 `npm run demo:agent`로 실행하며 기본 포트는 4181입니다.
+| AI | 연결 방식 | 준비 |
+| --- | --- | --- |
+| Codex | 로컬 Codex의 실시간 WebRTC 음성 | Codex CLI와 기존 로그인 |
+| Claude | 로컬 Whisper → Claude Code → macOS 음성 합성 | `npm run setup:claude`, Claude 로그인, macOS |
+
+[Codex 연결 안내](docs/codex-voice.md), [Claude 연결 안내](docs/claude-voice.md)에 설정과 검증 범위를 정리했습니다.
+현재 환경의 Claude 실제 모델 응답은 인증 갱신 후 확인해야 하며, 구현·자동 검증과 로컬 음성 엔진 검증을 완료했습니다.
+
+각 제공자의 독립 화면은 `npm run demo:codex`(4182), `npm run demo:claude`(4183)로 실행합니다.
+모델 없는 연결 테스트는 `npm run demo:agent`(4181)입니다. 통합 화면 포트는 `PORT=4194 npm run demo`로 바꿉니다.
 
 ## 실제 AI 제공자 연결 지점
 
@@ -60,6 +66,7 @@ await huddle.dispose();
 
 | 모듈 | 역할 |
 | --- | --- |
+| `huddle-lab/claude-voice` | 로컬 Claude Code용 발화 감지·취소·음성 제공자 |
 | `huddle-lab/codex-voice` | 로컬 Codex WebRTC 제공자와 브라우저 커넥터 |
 | `huddle-lab/agent-voice` | 사용자와 AI의 직접 음성 세션, 상태·발화문·끼어들기 |
 | `huddle-lab/web-audio` | 48 kHz 마이크 캡처, 음소거, 참가자별 재생 |

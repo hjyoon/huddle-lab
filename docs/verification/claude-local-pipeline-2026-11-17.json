@@ -1,0 +1,13 @@
+{
+  "mode": "real local Whisper + macOS TTS + native browser audio; Claude response is a test fixture",
+  "claudeInferenceVerified": false,
+  "prompt": "안녕하세요. 짧게 인사해 주세요.",
+  "recognized": "안녕하세요? 짧게 인사해주세요",
+  "transcripts": "사용자: 안녕하세요? 짧게 인사해주세요\nClaude: 안녕하세요. 음성 연결 구조 테스트입니다.",
+  "nonzeroPlaybackFrames": 131,
+  "contextsClosed": true,
+  "tracksEnded": true,
+  "phase": "대기 중",
+  "error": "",
+  "pageErrors": []
+}

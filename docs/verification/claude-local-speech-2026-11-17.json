@@ -1,0 +1,13 @@
+{
+  "mode": "local speech engines; no Claude inference; synthetic audio only",
+  "engine": "faster-whisper 1.2.1 / PyAV 16.1.0",
+  "model": "base",
+  "voice": "Yuna",
+  "language": "ko",
+  "input": "안녕하세요. 음성 연결을 준비했습니다.",
+  "recognized": "안녕하세요. 음성 연결을 준비했습니다.",
+  "durationSeconds": 2.9122291666666666,
+  "ttsMs": 1908,
+  "sttMs": 2076,
+  "passed": true
+}

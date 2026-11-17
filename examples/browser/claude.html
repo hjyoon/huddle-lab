@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude AI Huddle</title>
+<style>
+:root{font:16px/1.65 system-ui,sans-serif;color-scheme:light dark}body{max-width:720px;margin:56px auto;padding:0 24px}h1{font-size:1.8rem}button{font:inherit;padding:10px 16px;margin:5px 5px 5px 0;cursor:pointer}button:disabled{cursor:default}#error{color:light-dark(#ad2525,#ff9999)}#workspace{overflow-wrap:anywhere}
+</style></head><body>
+<h1>Claude AI Huddle</h1>
+<p>로컬 Claude Code와 음성으로 대화합니다. 음성 인식과 합성은 이 Mac에서 처리하고, 인식한 대화 내용은 Claude 서비스로 전송합니다.</p>
+<p id="setup" role="status">Claude 및 로컬 음성 엔진 확인 중…</p>
+<p>작업 폴더: <span id="workspace">확인 중</span> · 음성 대화 모드</p>
+<p><strong id="status">대기 중</strong> · <span id="activity">대기</span></p>
+<button id="start" disabled>Claude와 통화 시작</button><button id="mute" disabled aria-pressed="false">마이크 음소거</button><button id="interrupt" disabled>응답 중단</button><button id="stop" disabled>종료</button>
+<p>말을 마친 뒤 잠시 쉬면 답변합니다. AI가 말할 때 다시 말하면 응답을 중단합니다. 한 번에 30초까지 말할 수 있습니다.</p>
+<p id="error" role="alert"></p><h2>대화</h2><ol id="transcripts" aria-label="대화 발화문"></ol>
+<script type="module" src="/examples/browser/claude-demo.js"></script></body></html>

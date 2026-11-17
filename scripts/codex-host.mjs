@@ -10,7 +10,7 @@ import { serveDemoFile } from "./serve-demo.mjs";
 const run = promisify(execFile);
 const text = (value) => String(value ?? "Codex request failed").replace(/[\x00-\x1f]/g, " ").slice(0, 1000);
 export async function createCodexHost({ port = 4182, cwd = process.cwd(), binary = "codex",
-  runtimeRoot = resolve(cwd, ".huddle-runtime/codex"), createRpc = openCodexRpc } = {}) {
+  runtimeRoot = resolve(cwd, ".huddle-runtime/codex"), createRpc = openCodexRpc, allowedOrigins = [] } = {}) {
   if (!isAbsolute(cwd) || !(await stat(cwd)).isDirectory()) throw new Error("Choose an existing absolute Codex workspace.");
   let url, active, status, checking;
   const makeRpc = (signal) => createRpc({ cwd, runtimeRoot, binary, signal });
@@ -45,7 +45,8 @@ export async function createCodexHost({ port = 4182, cwd = process.cwd(), binary
   });
   const websocket = new WebSocketServer({ noServer: true, maxPayload: 128 * 1024 });
   server.on("upgrade", (request, socket, head) => {
-    if (request.headers.host !== new URL(url).host || request.headers.origin !== url || request.url !== "/codex" || active) {
+    if (request.headers.host !== new URL(url).host ||
+      (request.headers.origin !== url && !allowedOrigins.includes(request.headers.origin)) || request.url !== "/codex" || active) {
       socket.end(`HTTP/1.1 ${active ? "409 Conflict" : "403 Forbidden"}\r\nConnection: close\r\n\r\n`); return;
     }
     websocket.handleUpgrade(request, socket, head, (client) => websocket.emit("connection", client));

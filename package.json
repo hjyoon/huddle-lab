@@ -32,6 +32,10 @@
     "./codex-voice": {
       "types": "./dist/codex-voice/index.d.ts",
       "import": "./dist/codex-voice/index.js"
+    },
+    "./claude-voice": {
+      "types": "./dist/claude-voice/index.d.ts",
+      "import": "./dist/claude-voice/index.js"
     }
   },
   "files": [
@@ -47,14 +51,18 @@
     "build": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "npm run build && node --test tests/*.test.mjs",
-    "demo": "npm run demo:codex",
+    "demo": "npm run demo:ai",
     "demo:agent": "npm run build && node scripts/demo-agent.mjs",
     "demo:core": "npm run build && node examples/controller.mjs",
     "demo:audio": "npm run build && node scripts/serve-demo.mjs",
     "demo:relay": "npm run build && node scripts/demo-relay.mjs",
     "test:browser": "npm run build && node --test tests/browser/*.test.mjs",
     "prepack": "npm run build",
-    "demo:codex": "npm run build && node scripts/demo-codex.mjs"
+    "demo:codex": "npm run build && node scripts/demo-codex.mjs",
+    "setup:claude": "node scripts/setup-claude-voice.mjs",
+    "demo:claude": "npm run build && node scripts/demo-claude.mjs",
+    "verify:claude-speech": "node scripts/verify-claude-speech.mjs",
+    "demo:ai": "npm run build && node scripts/demo-ai.mjs"
   },
   "devDependencies": {
     "playwright": "1.65.1",

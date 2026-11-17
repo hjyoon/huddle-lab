@@ -9,10 +9,11 @@ WebRTC 음성 경로를 연결합니다. Buzz 1.0.4의 `bundled/codex/voice.ts`,
 ```sh
 codex login status
 npm ci
-npm run demo
+npm run demo:codex
 ```
 
-`http://127.0.0.1:4182/`에서 **Codex와 통화 시작**을 누르고 마이크 권한을 허용합니다.
+통합 화면은 `npm run demo`의 `http://127.0.0.1:4184/`에서 Codex를 선택합니다.
+독립 화면은 `http://127.0.0.1:4182/`에서 **Codex와 통화 시작**을 누르고 마이크 권한을 허용합니다.
 설치된 Codex에 로그인되어 있어야 하며 해당 계정·CLI가 실험적인 realtime v3 음성을
 지원해야 합니다. 로그인이 필요하면 터미널에서 `codex login` 후 데모 서버를 재시작합니다.
 로그인 확인은 음성 기능 이용 권한까지 보장하지 않습니다. 서비스의 오류는 화면에 표시합니다.
@@ -44,7 +45,8 @@ await huddle.start();
 ```
 
 Node 호스트는 `scripts/codex-host.mjs`의 `createCodexHost({ cwd, port })`로 실행합니다.
-브라우저는 반드시 이 호스트가 제공하는 페이지와 같은 Origin에서 접속해야 합니다.
+독립 실행에서는 이 호스트의 페이지 Origin을 확인합니다. 통합 실행에서는 선택 화면의 정확한
+loopback Origin을 `allowedOrigins`로 추가해 신뢰하고, 다른 Origin은 거절합니다.
 브라우저 번들에는 Node 프로세스 코드나 인증 정보가 포함되지 않습니다. worklet을 별도
 서빙하는 번들러는 `createCodexVoiceProvider({ connect, workletUrl })`를 지정합니다.
 
