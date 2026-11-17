@@ -2,7 +2,7 @@
   "name": "huddle-lab",
   "version": "0.1.0",
   "private": true,
-  "description": "Host-independent Huddle lifecycle and call controller extracted from Buzz 1.0.4",
+  "description": "Provider-independent AI voice Huddles extracted from Buzz 1.0.4",
   "type": "module",
   "license": "Apache-2.0",
   "engines": {
@@ -24,6 +24,10 @@
     "./webcodecs": {
       "types": "./dist/webcodecs/index.d.ts",
       "import": "./dist/webcodecs/index.js"
+    },
+    "./agent-voice": {
+      "types": "./dist/agent-voice/index.d.ts",
+      "import": "./dist/agent-voice/index.js"
     }
   },
   "files": [
@@ -38,7 +42,9 @@
     "build": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "npm run build && node --test tests/*.test.mjs",
-    "demo": "npm run build && node examples/controller.mjs",
+    "demo": "npm run demo:agent",
+    "demo:agent": "npm run build && node scripts/demo-agent.mjs",
+    "demo:core": "npm run build && node examples/controller.mjs",
     "demo:audio": "npm run build && node scripts/serve-demo.mjs",
     "demo:relay": "npm run build && node scripts/demo-relay.mjs",
     "test:browser": "npm run build && node --test tests/browser/*.test.mjs",

@@ -26,6 +26,13 @@ Block, Inc.). The implementation replaces native TLS/Opus/NetEQ ownership with
 injected WebSocket and codec hosts, independent signature verification and
 bounded fixed PCM playout. src/webcodecs/ provides a separate browser codec.
 
+src/agent-voice/ adapts the AI voice-seat lifetime in buzz-app's
+src/features/huddle/voice.ts and AgentVoiceSeat/AgentVoiceConnection contracts.
+Changes include a provider-independent one-user/one-AI pipe, response IDs for
+interruption, final transcript events and explicit host session cancellation.
+The included test provider generates tones and synthetic transcript fixtures;
+it is not an AI model, speech recognizer or speech synthesizer.
+
 Buzz UI, artwork, agent integrations and application relay implementations
 are not included. Upstream NOTICE.md's asset and other-feature attributions
 do not pertain to the extracted files.

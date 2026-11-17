@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>AI Huddle · 연결 구조 테스트</title>
+    <style>
+      :root { font: 16px/1.6 system-ui, sans-serif; color-scheme: light dark; }
+      body { max-width: 680px; margin: 56px auto; padding: 0 24px; }
+      h1 { font-size: 1.6rem; }
+      button { font: inherit; padding: 8px 14px; margin: 4px 4px 4px 0; cursor: pointer; }
+      button:disabled { cursor: default; }
+      progress { width: 100%; }
+      #error { color: light-dark(#a32020, #ff9696); }
+    </style>
+  </head>
+  <body>
+    <h1>AI Huddle · 연결 구조 테스트</h1>
+    <p><strong>실제 AI 모델 미연결</strong></p>
+    <p>마이크 → 음성 제공자 → 응답 재생 경로를 확인합니다. 지금은 테스트 제공자가 입력 프레임을 세고 테스트 음을 출력합니다. 음성 인식·AI 답변 생성·음성 합성은 아직 연결하지 않았습니다.</p>
+    <p id="status" role="status">대기 중</p>
+    <p>제공자 상태: <strong id="activity">대기</strong></p>
+    <button id="start" type="button">연결 테스트 시작</button>
+    <button id="mute" type="button" disabled aria-pressed="false">마이크 음소거</button>
+    <button id="respond" type="button" disabled>테스트 응답 재생</button>
+    <button id="interrupt" type="button" disabled>끼어들기</button>
+    <button id="stop" type="button" disabled>종료</button>
+    <p>입력 프레임: <span id="frames">0</span></p>
+    <label for="level">마이크 입력 레벨</label>
+    <progress id="level" max="1" value="0"></progress>
+    <h2>테스트 발화문</h2>
+    <p>아래 내용은 테스트 제공자가 만든 합성 데이터입니다.</p>
+    <ol id="transcripts" aria-label="제공자 발화문"></ol>
+    <p id="error" role="alert"></p>
+    <script type="module" src="/examples/browser/agent-demo.js"></script>
+  </body>
+</html>

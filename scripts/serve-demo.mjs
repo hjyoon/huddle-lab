@@ -30,8 +30,11 @@ export async function serveDemoFile(request, response) {
     }
 }
 
-export async function serveDemo(port = 4173) {
-  const server = createServer(serveDemoFile);
+export async function serveDemo(port = 4173, entry = "/examples/browser/index.html") {
+  const server = createServer((request, response) => {
+    if (new URL(request.url, "http://localhost").pathname === "/") request.url = entry;
+    return serveDemoFile(request, response);
+  });
   await new Promise((resolve, reject) => {
     server.once("error", reject);
     server.listen(port, "127.0.0.1", resolve);
