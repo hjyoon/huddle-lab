@@ -1,0 +1,75 @@
+{
+  "timestamp": "2026-11-17T08:56:35.393Z",
+  "version": "codex-cli 0.150.1",
+  "mode": "barge-in",
+  "summaries": [
+    {
+      "trial": 1,
+      "inputDurationMs": 2763,
+      "speakerActiveAtOnset": true,
+      "recognitionLatencyMs": 1390,
+      "previousAssistantTurnDoneLatencyMs": 1433,
+      "previousAssistantTranscript": " One... two... three",
+      "oldAssistantSpeakerOverlapMsApprox": 680,
+      "localInterruptLatencyMs": 1390,
+      "firstRemote500msSilence": {
+        "startMs": 117,
+        "durationMs": 501
+      },
+      "firstSpeaker500msSilence": {
+        "startMs": 192,
+        "durationMs": 560
+      },
+      "assistantAfterOnset": " three Okay. Banana.",
+      "changedReplyToBanana": true,
+      "peerCount": 1,
+      "manualInterruptRequests": 0,
+      "realtimeStarts": 1,
+      "automaticBargeInObserved": true,
+      "phase": "connected",
+      "error": null,
+      "cleanup": {
+        "phase": "idle",
+        "contextsClosed": true,
+        "peersClosed": true,
+        "tracksEnded": true
+      },
+      "pageErrors": []
+    },
+    {
+      "trial": 2,
+      "inputDurationMs": 2757,
+      "speakerActiveAtOnset": true,
+      "recognitionLatencyMs": 1280,
+      "previousAssistantTurnDoneLatencyMs": 1326,
+      "previousAssistantTranscript": " One... two... three...",
+      "oldAssistantSpeakerOverlapMsApprox": 380,
+      "localInterruptLatencyMs": 2625,
+      "firstRemote500msSilence": {
+        "startMs": 336,
+        "durationMs": 501
+      },
+      "firstSpeaker500msSilence": {
+        "startMs": 411,
+        "durationMs": 2144
+      },
+      "assistantAfterOnset": " Okay. Banana.",
+      "changedReplyToBanana": true,
+      "peerCount": 1,
+      "manualInterruptRequests": 0,
+      "realtimeStarts": 1,
+      "automaticBargeInObserved": true,
+      "phase": "connected",
+      "error": null,
+      "cleanup": {
+        "phase": "idle",
+        "contextsClosed": true,
+        "peersClosed": true,
+        "tracksEnded": true
+      },
+      "pageErrors": []
+    }
+  ],
+  "environment": "live Codex WebRTC, synthetic microphone, no manual interruption",
+  "measurementNote": "First silence can be a natural pause. Previous assistant turn.done arrival is reported separately and is not an exact acoustic cutoff timestamp."
+}

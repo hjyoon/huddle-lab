@@ -1,0 +1,24 @@
+{
+  "timestamp": "2026-11-17T08:59:14.215Z",
+  "version": "codex-cli 0.150.1",
+  "mode": "control",
+  "environment": "live Codex WebRTC, synthetic microphone, no manual interruption",
+  "summaries": [
+    {
+      "trial": 1,
+      "control": true,
+      "assistantTranscript": " One... two... three... four... five... six... seven... eight... nine... ten... eleven... twelve... thirteen... fourteen...",
+      "voiceFramesAfterAnchor": 174,
+      "peerCount": 1,
+      "phase": "connected",
+      "error": null,
+      "cleanup": {
+        "phase": "idle",
+        "contextsClosed": true,
+        "peersClosed": true,
+        "tracksEnded": true
+      },
+      "pageErrors": []
+    }
+  ]
+}
