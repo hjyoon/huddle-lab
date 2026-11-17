@@ -12,6 +12,12 @@ were replaced with local contracts. src/controller.ts adapts service.ts's
 single-call lifetime, late-result cancellation, mute and heartbeat behavior
 to injected host adapters. src/types.ts adapts the bridge and audio contracts.
 
+src/web-audio/index.ts adapts src/features/huddle/audio.ts to a standalone
+adapter with a packaged AudioWorklet URL and no device settings owner.
+playout.ts and capture.worklet.js are extracted from the same upstream
+directory. Changes include finite-sample checks, idempotent playout cleanup,
+late-permission cancellation and processor-failure cleanup.
+
 Buzz UI, artwork, agent integrations and application relay implementations
 are not included. Upstream NOTICE.md's asset and other-feature attributions
 do not pertain to the extracted files.

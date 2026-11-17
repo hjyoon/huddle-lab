@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Huddle Lab · 오디오 확인</title>
+    <style>
+      :root { font: 16px/1.6 system-ui, sans-serif; color-scheme: light dark; }
+      body { max-width: 640px; margin: 64px auto; padding: 0 24px; }
+      h1 { font-size: 1.6rem; }
+      button { font: inherit; padding: 8px 14px; margin: 4px 4px 4px 0; cursor: pointer; }
+      button:disabled { cursor: default; }
+      label { display: block; margin: 20px 0; }
+      progress { width: 100%; }
+      #error { color: light-dark(#a32020, #ff9696); }
+      dt { font-weight: 600; } dd { margin: 0 0 12px; }
+    </style>
+  </head>
+  <body>
+    <h1>Huddle Lab · 오디오 확인</h1>
+    <p>마이크 입력과 스피커 재생을 이 브라우저 안에서 확인합니다. 음성을 저장하거나 서버로 전송하지 않습니다.</p>
+    <p id="status" role="status">대기 중</p>
+    <button id="start" type="button">마이크 시작</button>
+    <button id="mute" type="button" disabled aria-pressed="false">음소거</button>
+    <button id="tone" type="button" disabled>재생 테스트</button>
+    <button id="stop" type="button" disabled>종료</button>
+    <label><input id="loopback" type="checkbox"> 내 목소리도 재생하기 (이어폰 사용 권장)</label>
+    <label for="level">입력 레벨</label>
+    <progress id="level" max="1" value="0"></progress>
+    <dl>
+      <dt>캡처 프레임</dt><dd id="frames">0</dd>
+      <dt>오디오 형식</dt><dd>48 kHz · 모노 · 프레임당 960 samples (20 ms)</dd>
+    </dl>
+    <p id="error" role="alert"></p>
+    <script type="module" src="/examples/browser/demo.js"></script>
+  </body>
+</html>

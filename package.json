@@ -5,17 +5,37 @@
   "description": "Host-independent Huddle lifecycle and call controller extracted from Buzz 1.0.4",
   "type": "module",
   "license": "Apache-2.0",
-  "engines": { "node": ">=20" },
-  "exports": {
-    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" }
+  "engines": {
+    "node": ">=20"
   },
-  "files": ["dist", "examples", "LICENSE", "NOTICE", "README.md"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./web-audio": {
+      "types": "./dist/web-audio/index.d.ts",
+      "import": "./dist/web-audio/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "examples",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "npm run build && node --test tests/*.test.mjs",
     "demo": "npm run build && node examples/controller.mjs",
+    "demo:audio": "npm run build && node scripts/serve-demo.mjs",
+    "test:browser": "npm run build && node --test tests/browser/*.test.mjs",
     "prepack": "npm run build"
   },
-  "devDependencies": { "typescript": "5.9.3" }
+  "devDependencies": {
+    "playwright": "1.65.1",
+    "typescript": "5.9.3"
+  }
 }

@@ -3,8 +3,9 @@
 Buzz 1.0.4의 Huddle 로직에서 분리한 TypeScript 코어 라이브러리입니다.
 UI 프레임워크나 Tauri 없이 사용할 수 있으며 런타임 패키지 의존성이 없습니다.
 
-현재 단계에서는 실제 마이크나 Relay에 연결하지 않습니다. 해당 기능은 호스트가
-어댑터로 제공합니다. 라이브러리는 호출 순서, 통화 상태, 취소와 자원 정리를 담당합니다.
+코어는 호출 순서, 통화 상태, 취소와 자원 정리를 담당합니다.
+선택적으로 `huddle-lab/web-audio` 어댑터를 연결해 실제 마이크와 스피커를 사용할 수 있습니다.
+Relay 연결·인증은 아직 호스트 어댑터로 제공해야 합니다.
 
 ## 실행
 
@@ -19,6 +20,62 @@ npm run demo
 `demo`는 메모리 내 어댑터로 참여 → PCM 전달 → 음소거 → 종료를 실행합니다.
 실제 음성 통화 데모는 아닙니다. `npm run build`는 ESM 코드와 타입 선언을 `dist/`에
 생성하고, `npm run typecheck`는 타입만 검사합니다.
+
+## 브라우저 오디오 확인
+
+```sh
+npm run demo:audio
+```
+
+출력된 `http://127.0.0.1:4173`을 열고 **마이크 시작**을 누른 뒤 권한을 허용합니다.
+말할 때 입력 레벨과 프레임 수가 변하고, 음소거하면 두 값의 증가가 멈춥니다.
+**재생 테스트**는 짧은 테스트 음을 재생하며 **종료**는 마이크와 오디오 컨텍스트를 해제합니다.
+내 목소리 재생은 기본으로 꺼져 있습니다. 이어폰을 사용한 상태에서 선택해 확인하세요.
+브라우저 내 로컬 확인이므로 녹음 저장이나 원격 음성 전송은 하지 않습니다.
+
+포트가 사용 중이면 `HUDDLE_DEMO_PORT=4174 npm run demo:audio`처럼 변경합니다.
+서버는 `127.0.0.1`에만 바인딩하며 예제와 빌드된 파일만 제공합니다.
+
+브라우저 자동 테스트는 기본적으로 설치된 Google Chrome을 사용합니다.
+
+```sh
+npm run test:browser
+```
+
+Chrome이 없는 환경에서는 `npx playwright install chromium`으로 테스트용 브라우저를
+설치한 뒤 `HUDDLE_BROWSER_CHANNEL=chromium npm run test:browser`를 사용합니다.
+자동 테스트는 가상 마이크와 실제 브라우저의 AudioWorklet/Web Audio를 사용합니다.
+물리 마이크·스피커 음질, 기기별 권한 동작과 Safari/WebKit은 아직 확인하지 않았습니다.
+
+## Web Audio 어댑터 연결
+
+```ts
+import { createHuddles } from "huddle-lab";
+import { openWebAudio } from "huddle-lab/web-audio";
+
+const huddles = createHuddles({
+  ...hostOptions, // 호스트가 구현한 authorize, discover, bridge
+  openAudio: openWebAudio,
+});
+```
+
+어댑터는 `OpenHuddleAudio` 계약을 구현하며 기본 마이크와 기본 스피커를 사용합니다.
+장치 선택 UI는 포함하지 않습니다. 패키지 루트는 브라우저 API를 불러오지 않고,
+`web-audio` 모듈도 import만으로 마이크를 열지 않습니다. 실행에는 HTTPS 또는 localhost의
+AudioWorklet 지원 브라우저와 사용자의 명시적 시작 동작이 필요합니다.
+
+기본 worklet은 배포 파일 `dist/web-audio/capture.worklet.js`와 함께 제공됩니다.
+번들러가 자산 URL을 처리하지 않거나 별도 경로로 제공한다면 다음처럼 지정합니다.
+
+```ts
+import { createWebAudioAdapter } from "huddle-lab/web-audio";
+const openAudio = createWebAudioAdapter({ workletUrl: "/assets/capture.worklet.js" });
+```
+
+위 경로에 worklet 파일을 복사하고 호스트의 CSP와 오리진 정책이 모듈 로딩을 허용해야 합니다.
+마이크가 분리되거나 worklet이 실패하면 자원을 정리하고 `ended()`를 호출합니다.
+정상 종료·abort에는 `ended()`를 호출하지 않습니다. 수신 재생은 참가자별로 관리하고,
+최초 60ms 여유·underrun 후 20ms 재시작·200ms 예약 시작 상한을 원본처럼 유지합니다.
 
 ## 현재 제공하는 기능
 
@@ -92,13 +149,15 @@ Nostr 서명·인증, Opus/WebSocket 구현, 방 자동 archive가 포함되지 
 ## 추출 단계와 출처
 
 1. 완료: 순수 함수, 전송 큐, 주입 가능한 통화 컨트롤러, 공개 타입 및 테스트.
-2. 다음: Web Audio 어댑터를 별도 모듈로 분리하고 실제 마이크 입출력 확인.
-3. 이후: 원하는 호스트에 맞춰 인증·Relay 연결 어댑터 구현 및 실제 2인 통화 확인.
+2. 구현·자동 검증 완료: Web Audio 어댑터 분리, 로컬 마이크/재생 예제,
+   가상 마이크를 사용한 실제 Chrome 캡처·재생·정리 확인. 물리 장치 확인은 남아 있습니다.
+3. 다음: 원하는 호스트에 맞춰 인증·Relay 연결 어댑터 구현 및 실제 2인 통화 확인.
 
 원본은 `block/buzz-app`의 `v1.0.4`, 커밋
 `a1c9c96940d2a6c81fce9beed9b7cbcc34b144b8`입니다.
 `lifecycle.ts`, `discovery.ts`, `sender.ts`는 원본 동작을 유지하며 앱 전용 타입을
 교체했습니다. 컨트롤러는 `service.ts`의 통화 수명 처리를 독립 계약에 맞게 수정했습니다.
+Web Audio 어댑터는 `audio.ts`, `playout.ts`, `capture.worklet.js`에서 분리했습니다.
 원본 저장소를 실행하거나 이웃 경로에서 import할 필요가 없습니다.
 
 라이선스와 수정 내역은 [LICENSE](LICENSE), [NOTICE](NOTICE)를 확인하세요.
