@@ -33,6 +33,11 @@ interruption, final transcript events and explicit host session cancellation.
 The included test provider generates tones and synthetic transcript fixtures;
 it is not an AI model, speech recognizer or speech synthesizer.
 
-Buzz UI, artwork, agent integrations and application relay implementations
+src/codex-voice/ and scripts/codex-rpc.mjs adapt bundled/codex/voice.ts and
+rpc.ts from the same revision. Changes include a browser/Node boundary,
+local thread ownership, final transcripts, data-channel interruption,
+worklet generation fencing and owned process-group cleanup.
+
+Buzz UI, artwork, other agent integrations and application relay implementations
 are not included. Upstream NOTICE.md's asset and other-feature attributions
 do not pertain to the extracted files.

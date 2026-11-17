@@ -28,6 +28,10 @@
     "./agent-voice": {
       "types": "./dist/agent-voice/index.d.ts",
       "import": "./dist/agent-voice/index.js"
+    },
+    "./codex-voice": {
+      "types": "./dist/codex-voice/index.d.ts",
+      "import": "./dist/codex-voice/index.js"
     }
   },
   "files": [
@@ -36,26 +40,28 @@
     "docs",
     "LICENSE",
     "NOTICE",
-    "README.md"
+    "README.md",
+    "scripts"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "npm run build && node --test tests/*.test.mjs",
-    "demo": "npm run demo:agent",
+    "demo": "npm run demo:codex",
     "demo:agent": "npm run build && node scripts/demo-agent.mjs",
     "demo:core": "npm run build && node examples/controller.mjs",
     "demo:audio": "npm run build && node scripts/serve-demo.mjs",
     "demo:relay": "npm run build && node scripts/demo-relay.mjs",
     "test:browser": "npm run build && node --test tests/browser/*.test.mjs",
-    "prepack": "npm run build"
+    "prepack": "npm run build",
+    "demo:codex": "npm run build && node scripts/demo-codex.mjs"
   },
   "devDependencies": {
     "playwright": "1.65.1",
-    "typescript": "5.9.3",
-    "ws": "8.23.0"
+    "typescript": "5.9.3"
   },
   "dependencies": {
-    "@noble/curves": "2.0.1"
+    "@noble/curves": "2.0.1",
+    "ws": "8.23.0"
   }
 }

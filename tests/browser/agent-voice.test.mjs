@@ -45,7 +45,7 @@ async function pageFor(t) {
   return page;
 }
 
-test("default AI wiring demo is marked as model-free and exercises real capture/output/cleanup", { timeout: 20000 }, async (t) => {
+test("fixture AI wiring demo is marked as model-free and exercises real capture/output/cleanup", { timeout: 20000 }, async (t) => {
   const page = await pageFor(t);
   assert.equal(await page.getByText("실제 AI 모델 미연결", { exact: true }).count(), 1);
   await page.getByRole("button", { name: "연결 테스트 시작", exact: true }).click();
