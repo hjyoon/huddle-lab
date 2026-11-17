@@ -45,6 +45,7 @@ export type HuddleBridge = {
     destination: HuddleDestination,
     room: string | undefined,
     receive: (update: HuddleUpdate) => void,
+    signal?: AbortSignal,
   ): Promise<void>;
   close(id: string): Promise<void>;
   touch(id: string): Promise<void>;

@@ -283,3 +283,25 @@ test("dispose during authorization ignores late completion and never captures", 
   assert.equal(h.options.openAudio.mock.callCount(), 0);
   assert.equal(h.bridge.open.mock.callCount(), 0);
 });
+
+test("host session revocation cancels a pending microphone before transport opening", async (t) => {
+  const started = deferred(), gate = deferred(), session = new AbortController();
+  const lateAudio = { close: mock.fn() };
+  let captureSignal;
+  const h = harness({ signal: session.signal, openAudio: async (_send, _ended, signal) => {
+    captureSignal = signal; started.resolve(); await gate.promise; return lateAudio;
+  } });
+  t.after(() => h.huddle.dispose());
+  const joining = h.huddle.start(destination);
+  await started.promise;
+  const ended = waitPhase(h.huddle, "error");
+  session.abort(new Error("Signed out"));
+  await ended;
+  assert.equal(captureSignal.aborted, true);
+  gate.resolve();
+  await joining;
+  assert.equal(lateAudio.close.mock.callCount(), 1);
+  await h.huddle.start(destination);
+  assert.equal(h.bridge.open.mock.callCount(), 0);
+  assert.equal(h.huddle.snapshot().error, "Signed out");
+});

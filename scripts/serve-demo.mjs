@@ -6,8 +6,7 @@ import { fileURLToPath } from "node:url";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const contentTypes = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8" };
 
-export async function serveDemo(port = 4173) {
-  const server = createServer(async (request, response) => {
+export async function serveDemoFile(request, response) {
     try {
       if (!["GET", "HEAD"].includes(request.method)) {
         response.writeHead(405).end();
@@ -15,8 +14,10 @@ export async function serveDemo(port = 4173) {
       }
       const url = new URL(request.url, "http://localhost");
       const pathname = url.pathname === "/" ? "/examples/browser/index.html" : decodeURIComponent(url.pathname);
-      const path = resolve(root, `.${pathname}`);
-      const permitted = [resolve(root, "dist"), resolve(root, "examples/browser")];
+      const vendor = pathname.startsWith("/vendor/@noble/curves/") || pathname.startsWith("/vendor/@noble/hashes/");
+      const path = resolve(root, vendor ? `node_modules/${pathname.slice("/vendor/".length)}` : `.${pathname}`);
+      const permitted = [resolve(root, "dist"), resolve(root, "examples/browser"),
+        ...(vendor ? [resolve(root, "node_modules/@noble/curves"), resolve(root, "node_modules/@noble/hashes")] : [])];
       if (!permitted.some((directory) => path.startsWith(`${directory}${sep}`)) || !contentTypes[extname(path)]) {
         response.writeHead(404).end();
         return;
@@ -27,7 +28,10 @@ export async function serveDemo(port = 4173) {
     } catch {
       response.writeHead(404).end();
     }
-  });
+}
+
+export async function serveDemo(port = 4173) {
+  const server = createServer(serveDemoFile);
   await new Promise((resolve, reject) => {
     server.once("error", reject);
     server.listen(port, "127.0.0.1", resolve);

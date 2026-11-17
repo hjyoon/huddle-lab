@@ -26,6 +26,8 @@ export type HuddleOptions = {
   authorize(destination: HuddleDestination, room: string | undefined, signal: AbortSignal): Promise<void>;
   discover(destination: HuddleDestination, signal: AbortSignal): Promise<readonly HuddleRoom[]>;
   createId?: () => string;
+  /** Host session lifetime, including while microphone permission is pending. */
+  signal?: AbortSignal;
 };
 
 type Attempt = {
@@ -88,8 +90,15 @@ export function createHuddles(options: HuddleOptions) {
     return closing;
   }
 
+  const invalidateSession = () => { void leave(message(options.signal?.reason ?? "Huddle session ended.")); };
+  options.signal?.addEventListener("abort", invalidateSession, { once: true });
+
   async function join(destination: HuddleDestination, room?: string, discover = false) {
     if (disposed || current || closing) return;
+    if (options.signal?.aborted) {
+      invalidateSession();
+      return;
+    }
     if (!bridge.available) {
       update({ ...idle(), phase: "error", error: "Huddle transport is unavailable." });
       return;
@@ -153,7 +162,7 @@ export function createHuddles(options: HuddleOptions) {
       if (!valid(attempt)) { audio.close(); return; }
       attempt.audio = audio;
       attempt.opening = Promise.resolve().then(() => {
-        if (valid(attempt)) return bridge.open(id, destination, room, receive);
+        if (valid(attempt)) return bridge.open(id, destination, room, receive, abort.signal);
       });
       await attempt.opening;
       if (valid(attempt)) {
@@ -189,6 +198,7 @@ export function createHuddles(options: HuddleOptions) {
     invalidate: (reason: string) => leave(reason),
     async dispose() {
       disposed = true;
+      options.signal?.removeEventListener("abort", invalidateSession);
       await leave();
       listeners.clear();
     },

@@ -18,6 +18,14 @@ playout.ts and capture.worklet.js are extracted from the same upstream
 directory. Changes include finite-sample checks, idempotent playout cleanup,
 late-permission cancellation and processor-failure cleanup.
 
+src/relay/ adapts the HTTP admission, event construction and connection lifetime
+from the same buzz-app revision. Its audio handshake and v2 packet layout are
+adapted from crates/buzz-audio-client/{connection,wire,encoder}.rs in block/buzz
+revision 630922a9e1f891380a61f5b7d726d05ca948cc64 (Apache-2.0, Copyright 2026
+Block, Inc.). The implementation replaces native TLS/Opus/NetEQ ownership with
+injected WebSocket and codec hosts, independent signature verification and
+bounded fixed PCM playout. src/webcodecs/ provides a separate browser codec.
+
 Buzz UI, artwork, agent integrations and application relay implementations
 are not included. Upstream NOTICE.md's asset and other-feature attributions
 do not pertain to the extracted files.

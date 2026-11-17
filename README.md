@@ -1,15 +1,17 @@
 # Huddle Lab
 
 Buzz 1.0.4의 Huddle 로직에서 분리한 TypeScript 코어 라이브러리입니다.
-UI 프레임워크나 Tauri 없이 사용할 수 있으며 런타임 패키지 의존성이 없습니다.
+UI 프레임워크나 Tauri 없이 사용할 수 있습니다. 코어와 Web Audio는 프레임워크에
+의존하지 않으며, 선택적 Relay 어댑터는 BIP-340 검증에 `@noble/curves`를 사용합니다.
 
 코어는 호출 순서, 통화 상태, 취소와 자원 정리를 담당합니다.
 선택적으로 `huddle-lab/web-audio` 어댑터를 연결해 실제 마이크와 스피커를 사용할 수 있습니다.
-Relay 연결·인증은 아직 호스트 어댑터로 제공해야 합니다.
+`huddle-lab/relay`는 서명된 REST와 Huddle v2 WebSocket 연결을 제공합니다.
+서명 키·커뮤니티 로그인은 호스트가 관리하고 브라우저 Opus는 `huddle-lab/webcodecs`로 연결합니다.
 
 ## 실행
 
-Node.js 20 이상에서 저장소 루트 기준으로 실행합니다.
+Node.js 20.19 이상에서 저장소 루트 기준으로 실행합니다.
 
 ```sh
 npm ci
@@ -93,6 +95,8 @@ const openAudio = createWebAudioAdapter({ workletUrl: "/assets/capture.worklet.j
 | `huddleDescription()` / `huddleParent()` / `huddleRoom()` / `isHuddleRoom()` | 방 메타데이터 해석 |
 | `huddleLifecycle()` | 시작·종료·참가 이력 해석 |
 | `createPcmSender()` | 직렬 PCM 전송 및 대기 프레임 제한 |
+| `createRelayAdapter()` (`huddle-lab/relay`) | NIP-98 REST, 검증된 멤버십/방 탐색, 방 생성, NIP-42 오디오 연결 |
+| `createWebCodecsCodec()` (`huddle-lab/webcodecs`) | 브라우저 Opus 인코딩 및 참가자별 디코딩 |
 
 컨트롤러의 상태는 `idle → connecting → connected → leaving → idle`이며,
 실패는 `error`로 표시됩니다. `start()`와 `join()`의 Promise는 호스트의 `open()`이
@@ -138,26 +142,51 @@ close는 없는 ID에도 안전해야 합니다. 호스트의 네트워크 연�
 kind-9007 생성 receipt와 Relay 메타데이터 확인은 호스트의 책임입니다.
 오디오 참여 사실만으로 채팅 쓰기 권한을 부여하면 안 됩니다.
 
-이 코어에는 UI, 별도 창, 수신 요청·벨소리, 장치 선택, 채팅, 에이전트 음성 좌석,
-Nostr 서명·인증, Opus/WebSocket 구현, 방 자동 archive가 포함되지 않습니다.
+패키지 루트 코어에는 UI, 별도 창, 수신 요청·벨소리, 장치 선택, 채팅, 에이전트 음성 좌석,
+Nostr 인증, Opus/WebSocket 구현, 방 자동 archive가 포함되지 않습니다.
+인증·연결·Opus는 별도 subpath 모듈로 선택해 사용합니다.
 `leave()`는 로컬 통화 종료이며 방 전체의 종료 공지나 archive를 자동 수행하지 않습니다.
 
 원본의 방 탐색은 kind `48100`/`48103`과 3600초 TTL을 사용합니다.
 참가 이력은 Relay가 발행한 `48101`/`48102`를 해석합니다.
-방 생성 `9007`, 멤버십 확인 `9000`, 최종 권한 검사와 서버 측 정리는 향후 어댑터 범위입니다.
+Relay 어댑터가 방 생성 `9007`, 시작 공지 `48100`, 멤버십 확인 `9000`과
+공지 전 실패한 생성의 정리 `9002`를 처리합니다. 서버의 최종 입장 검사와 만료 정리는 Relay의 책임입니다.
+
+## 로컬 Relay로 두 사용자 통화 확인
+
+```sh
+npm run demo:relay
+```
+
+터미널의 **User A**, **User B** 링크를 각각 열고 **통화 시작**을 누릅니다.
+두 사용자가 같은 방에 들어오면 참가자가 2명으로 표시되고 수신 프레임 수가 증가합니다.
+실제 마이크 음성은 이 컴퓨터의 Relay를 통해 다른 탭으로 전달됩니다.
+기본 주소는 `http://127.0.0.1:4180/examples/browser/relay.html?peer=0`과 `?peer=1`입니다.
+`HUDDLE_RELAY_PORT=4181 npm run demo:relay`로 포트를 바꿀 수 있습니다.
+
+이 서버는 **개발용 프로토콜 fixture**입니다. 키·사용자·방을 메모리에만 만들고,
+종료하면 버립니다. 데모의 로컬 서명 endpoint는 이 임시 키만 사용합니다.
+운영 계정 키를 넣거나 운영 Relay로 배포하지 않습니다. 원격 서비스에는 연결하지 않습니다.
+원본 Buzz Relay와의 호환성은 실제 서버에서 별도로 확인해야 합니다.
+
+실제 호스트 연결 방법과 검증 범위는 [Relay 어댑터 안내](docs/relay.md)를 확인하세요.
 
 ## 추출 단계와 출처
 
 1. 완료: 순수 함수, 전송 큐, 주입 가능한 통화 컨트롤러, 공개 타입 및 테스트.
 2. 구현·자동 검증 완료: Web Audio 어댑터 분리, 로컬 마이크/재생 예제,
    가상 마이크를 사용한 실제 Chrome 캡처·재생·정리 확인. 물리 장치 확인은 남아 있습니다.
-3. 다음: 원하는 호스트에 맞춰 인증·Relay 연결 어댑터 구현 및 실제 2인 통화 확인.
+3. 구현: 인증·Relay 어댑터, 브라우저 Opus, 두 사용자 로컬 통화 예제.
+   로컬 HTTP/WS의 실제 서명 검사와 Chrome 가상 마이크 2개의 Opus 송수신을 검증합니다.
+   운영 Buzz Relay, 실제 두 사람의 물리 마이크 통화와 Safari/WebKit은 별도 확인이 필요합니다.
 
 원본은 `block/buzz-app`의 `v1.0.4`, 커밋
 `a1c9c96940d2a6c81fce9beed9b7cbcc34b144b8`입니다.
 `lifecycle.ts`, `discovery.ts`, `sender.ts`는 원본 동작을 유지하며 앱 전용 타입을
 교체했습니다. 컨트롤러는 `service.ts`의 통화 수명 처리를 독립 계약에 맞게 수정했습니다.
 Web Audio 어댑터는 `audio.ts`, `playout.ts`, `capture.worklet.js`에서 분리했습니다.
+Relay 프로토콜은 원본의 Rust Huddle 코드와, 원본이 고정해 사용하던 `block/buzz`
+커밋 `630922a9e1f891380a61f5b7d726d05ca948cc64`의 `buzz-audio-client`를 기준으로 구현했습니다.
 원본 저장소를 실행하거나 이웃 경로에서 import할 필요가 없습니다.
 
 라이선스와 수정 내역은 [LICENSE](LICENSE), [NOTICE](NOTICE)를 확인하세요.

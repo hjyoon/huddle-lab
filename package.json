@@ -6,7 +6,7 @@
   "type": "module",
   "license": "Apache-2.0",
   "engines": {
-    "node": ">=20"
+    "node": ">=20.19"
   },
   "exports": {
     ".": {
@@ -16,11 +16,20 @@
     "./web-audio": {
       "types": "./dist/web-audio/index.d.ts",
       "import": "./dist/web-audio/index.js"
+    },
+    "./relay": {
+      "types": "./dist/relay/index.d.ts",
+      "import": "./dist/relay/index.js"
+    },
+    "./webcodecs": {
+      "types": "./dist/webcodecs/index.d.ts",
+      "import": "./dist/webcodecs/index.js"
     }
   },
   "files": [
     "dist",
     "examples",
+    "docs",
     "LICENSE",
     "NOTICE",
     "README.md"
@@ -31,11 +40,16 @@
     "test": "npm run build && node --test tests/*.test.mjs",
     "demo": "npm run build && node examples/controller.mjs",
     "demo:audio": "npm run build && node scripts/serve-demo.mjs",
+    "demo:relay": "npm run build && node scripts/demo-relay.mjs",
     "test:browser": "npm run build && node --test tests/browser/*.test.mjs",
     "prepack": "npm run build"
   },
   "devDependencies": {
     "playwright": "1.65.1",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "ws": "8.23.0"
+  },
+  "dependencies": {
+    "@noble/curves": "2.0.1"
   }
 }
