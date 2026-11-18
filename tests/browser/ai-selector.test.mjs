@@ -19,7 +19,10 @@ test('user selects the AI, only that provider starts, and selection unlocks afte
  assert.equal(await page.locator('#provider').isDisabled(),true);assert.equal(fixtures.calls.codexStarts,1);
  await page.locator('#stop').click();await page.waitForFunction(()=>document.getElementById('status').textContent==='대기 중');assert.equal(await page.locator('#provider').isEnabled(),true);
  assert.equal(await page.evaluate(()=>tracks.every(track=>track.readyState==='ended')),true);
- await page.reload();await page.waitForFunction(()=>!document.getElementById('start').disabled);assert.equal(await page.locator('#provider').inputValue(),'claude');
+ await page.locator('#provider').selectOption('openclaw');await page.waitForFunction(()=>!document.getElementById('start').disabled&&document.getElementById('start').textContent==='OpenClaw와 통화 시작');
+ assert.match(await page.locator('#description').textContent(),/OpenClaw/);await page.locator('#start').click();await page.waitForFunction(()=>document.getElementById('status').textContent==='통화 중');
+ assert.equal(await page.locator('#provider').isDisabled(),true);await page.locator('#stop').click();await page.waitForFunction(()=>document.getElementById('status').textContent==='대기 중');
+ await page.reload();await page.waitForFunction(()=>!document.getElementById('start').disabled);assert.equal(await page.locator('#provider').inputValue(),'openclaw');
  await page.locator('#provider').selectOption('codex');await page.waitForFunction(()=>document.getElementById('start').textContent==='Codex와 통화 시작'&&!document.getElementById('start').disabled);
 });
 test('a late readiness response from the previous AI cannot overwrite the new selection',{timeout:15000},async t=>{

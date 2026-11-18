@@ -36,6 +36,10 @@
     "./claude-voice": {
       "types": "./dist/claude-voice/index.d.ts",
       "import": "./dist/claude-voice/index.js"
+    },
+    "./openclaw-voice": {
+      "types": "./dist/openclaw-voice/index.d.ts",
+      "import": "./dist/openclaw-voice/index.js"
     }
   },
   "files": [
@@ -62,7 +66,8 @@
     "setup:claude": "node scripts/setup-claude-voice.mjs",
     "demo:claude": "npm run build && node scripts/demo-claude.mjs",
     "verify:claude-speech": "node scripts/verify-claude-speech.mjs",
-    "demo:ai": "npm run build && node scripts/demo-ai.mjs"
+    "demo:ai": "npm run build && node scripts/demo-ai.mjs",
+    "setup:voice": "node scripts/setup-claude-voice.mjs"
   },
   "devDependencies": {
     "playwright": "1.65.1",

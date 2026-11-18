@@ -4,6 +4,8 @@ const host=await createAiHost({port:Number(process.env.PORT??4184),cwd:resolve(p
  codex:{binary:process.env.HUDDLE_CODEX_BINARY??"codex"},
  claude:{binary:process.env.HUDDLE_CLAUDE_BINARY??"claude",...(process.env.HUDDLE_CLAUDE_PYTHON?{python:process.env.HUDDLE_CLAUDE_PYTHON}:{}),
  model:process.env.HUDDLE_CLAUDE_ASR_MODEL??"base",language:process.env.HUDDLE_CLAUDE_LANGUAGE??"ko",voice:process.env.HUDDLE_CLAUDE_VOICE??"Yuna"},
+ openclaw:{binary:process.env.HUDDLE_OPENCLAW_BINARY??"openclaw",agent:process.env.HUDDLE_OPENCLAW_AGENT,modelRef:process.env.HUDDLE_OPENCLAW_MODEL,
+ ...(process.env.HUDDLE_CLAUDE_PYTHON?{python:process.env.HUDDLE_CLAUDE_PYTHON}:{}),model:process.env.HUDDLE_CLAUDE_ASR_MODEL??"base",language:process.env.HUDDLE_CLAUDE_LANGUAGE??"ko",voice:process.env.HUDDLE_CLAUDE_VOICE??"Yuna"},
 });
-console.log(`AI Huddle (choose Codex or Claude): ${host.url}/`);
+console.log(`AI Huddle (choose Codex, Claude or OpenClaw): ${host.url}/`);
 for(const signal of ["SIGINT","SIGTERM"])process.once(signal,()=>{void host.close().then(()=>process.exit(0));});

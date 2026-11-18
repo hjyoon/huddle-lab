@@ -16,4 +16,4 @@ console.log("Installing local Whisper dependencies…");
 await runOwned(python,["-m","pip","install","--disable-pip-version-check","--cache-dir",join(runtime,"pip-cache"),"faster-whisper==1.2.1","av==16.1.0"],{timeoutMs:180000});
 console.log("Downloading/caching multilingual Whisper base weights…");
 await runOwned(python,[fileURLToPath(new URL("./claude-whisper.py",import.meta.url)),"--cache",join(runtime,"models"),"--model",process.env.HUDDLE_CLAUDE_ASR_MODEL??"base"],{timeoutMs:300000});
-console.log("Local Claude speech setup complete. Run npm run demo:claude.");
+console.log("Local speech setup complete. Run npm run demo.");

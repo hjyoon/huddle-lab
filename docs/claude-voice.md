@@ -48,6 +48,8 @@ PyAV 19에서는 이 faster-whisper 버전이 사용하는 `metadata_errors` 인
 기존 인증·모델 설정에 따라 Claude 서비스로 전송합니다. 발화 단위 임시 WAV와 합성 파일은
 작업 종료·취소 후 삭제합니다. 강제 종료 시 남은 `.huddle-runtime/claude/job-*`는 수동 삭제할 수 있습니다.
 
+음성 설치 명령 `npm run setup:voice`도 동일한 환경을 준비하며, OpenClaw와 음성 엔진을 공유합니다.
+
 ## 재사용
 
 ```ts
@@ -101,7 +103,7 @@ npm run test:browser
 npm run verify:claude-speech
 ```
 
-- 단위/통합 100개, Chrome 브라우저 16개 통과. Claude 테스트는 모델·STT/TTS 대역과 실제 브라우저 PCM 경로를 사용합니다.
+- 단위/통합 106개, Chrome 브라우저 18개 통과. Claude 테스트는 모델·STT/TTS 대역과 실제 브라우저 PCM 경로를 사용합니다.
 - 제공자 선택·선택한 AI만 시작·통화 중 선택 잠금·종료 후 전환·선택 저장·늦은 상태 응답 차단을 확인했습니다.
 - 자동 barge-in, 같은 소켓 유지, 늦은 이전 PCM 차단, 작업 취소·종료 대기, 음소거, 인증 오류 표시와 정리를 확인했습니다.
 - 실제 로컬 Yuna 합성 → Whisper base 인식에서 한국어 문장이 원문과 일치했습니다.
