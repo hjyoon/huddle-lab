@@ -103,3 +103,23 @@ test('saved remote authentication survives server restart and deletion survives 
  await host.close();host=await start();
  assert.equal((await(await fetch(path())).json()).hasCredentials,false);
 });
+
+test('Claude login is a same-origin POST proxied to the Claude backend',async t=>{
+ const f=providerFixtures();let logins=0;
+ f.claude.backend.inspect=async()=>({ready:false,needsLogin:true,error:'signed out',workspace:process.cwd()});
+ f.claude.backend.login=async()=>{logins++;};
+ const host=await createAiHost({port:0,...f});t.after(()=>host.close());
+ const status=await(await fetch(host.url+'/api/providers/claude')).json();
+ assert.equal(status.needsLogin,true);assert.equal(status.canLogin,true);
+ assert.equal((await(await fetch(host.url+'/api/providers/codex')).json()).canLogin,false);
+ const path=host.url+'/api/providers/claude/login',post=(headers)=>fetch(path,{method:'POST',headers,body:'{}'});
+ assert.equal((await fetch(path)).status,405);
+ assert.equal((await post({'Content-Type':'application/json'})).status,403);
+ assert.equal((await post({Origin:'https://foreign.example','Content-Type':'application/json'})).status,403);
+ assert.equal(logins,0);
+ const ok=await post({Origin:host.url,'Content-Type':'application/json'});
+ assert.equal(ok.status,200);assert.equal(logins,1);
+ f.claude.backend.login=async()=>{throw new Error('browser login failed');};
+ const failed=await post({Origin:host.url,'Content-Type':'application/json'});
+ assert.equal(failed.status,400);assert.equal((await failed.json()).error,'browser login failed');
+});

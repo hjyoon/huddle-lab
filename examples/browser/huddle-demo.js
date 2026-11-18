@@ -8,7 +8,7 @@ const names={codex:"Codex",claude:"Claude",openclaw:"OpenClaw"};
 const vpnAccess=location.protocol==="https:";
 let huddle,off,ready=false,selected="codex",generation=0,checking,remoteMode="local",configuring=false;
 let savedRemote=false,remoteStorageError=false;
-let savedUrl,savedAuthType,usingSavedSecret=false,revealing;
+let savedUrl,savedAuthType,usingSavedSecret=false,revealing,canLogin=false,loggingIn=false;
 const secretInput=element("remote-secret");
 const authTypeInput=element("remote-auth-type");
 const remoteUrlInput=element("remote-url");
@@ -41,6 +41,8 @@ const render=()=>{
  secretInput.placeholder=reuseSecret?"••••••••••••":"";
  secretInput.required=!reuseSecret;
  if(configuring)element("provider").disabled=true;
+ element("login-row").hidden=!canLogin||selected!=="claude";
+ element("login").disabled=loggingIn||!["idle","error"].includes(phase);
  element("start").disabled=!ready||!["idle","error"].includes(phase);
  element("start").textContent=`${names[selected]}와 통화 시작`;
  element("mute").disabled=!connected;element("interrupt").disabled=!connected||!["thinking","speaking"].includes(state.activity);
@@ -55,7 +57,7 @@ async function choose(id){
  if(!Object.hasOwn(names,id)||!idle()){element("provider").value=selected;return;}
  maskSecret();
  const token=++generation;checking?.abort();checking=new AbortController();const signal=checking.signal;
- const previous=huddle;off?.();off=undefined;huddle=undefined;ready=false;selected=id;
+ const previous=huddle;off?.();off=undefined;huddle=undefined;ready=false;canLogin=false;selected=id;
  element("provider").value=id;
  try{localStorage.setItem("huddle-ai",id);}catch{}
  element("setup").textContent=`${names[id]} 설치 및 연결 상태 확인 중…`;element("workspace").textContent="확인 중";
@@ -84,7 +86,8 @@ async function choose(id){
   const status=await result.json();if(token!==generation)return;
   element("workspace").textContent=status.workspace??"확인할 수 없음";
   ready=!!status.ready&&!status.busy;
-  element("setup").textContent=ready?`${status.version} · ${id!=="codex"?`로컬 음성 엔진 준비됨${status.modelName?` · ${status.modelName}`:""}`:"연결 준비됨"}`:(status.error??(status.busy?"이미 통화 중입니다. 종료 후 다시 선택해 주세요.":"선택한 AI의 설치·로그인 상태를 확인해 주세요."));
+  canLogin=!!status.needsLogin&&!!status.canLogin;
+  element("setup").textContent=ready?`${status.version} · ${id!=="codex"?`로컬 음성 엔진 준비됨${status.modelName?` · ${status.modelName}`:""}`:"연결 준비됨"}`:(status.needsLogin?`${status.error} ${canLogin?"아래 버튼으로 브라우저에서 로그인하거나 ":"이 Mac의 "}터미널에서 claude auth login을 실행해 주세요.`:status.error??(status.busy?"이미 통화 중입니다. 종료 후 다시 선택해 주세요.":"선택한 AI의 설치·로그인 상태를 확인해 주세요."));
   if(ready){
    const provider=id==="codex"?createCodexVoiceProvider({connect:createCodexLocalConnector(status.wsUrl)}):id==="claude"?createClaudeVoiceProvider({url:status.wsUrl}):createOpenClawVoiceProvider({url:status.wsUrl});
    huddle=createAgentHuddle({provider,openAudio:openWebAudio});off=huddle.subscribe(render);
@@ -167,6 +170,17 @@ for(const id of ["remote-url","remote-secret","remote-agent","remote-auth-type"]
  revealing?.abort();revealing=undefined;
  ready=false;generation++;checking?.abort();element("setup").textContent="변경한 원격 설정을 적용해 주세요.";render();
 });
+element("login").onclick=async()=>{
+ if(loggingIn||!idle()||selected!=="claude")return;
+ loggingIn=true;element("setup").textContent="열린 브라우저 창에서 Claude 로그인을 완료해 주세요…";render();
+ try{
+  const response=await fetch("/api/providers/claude/login",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});
+  const result=await response.json().catch(()=>({}));
+  if(!response.ok)throw new Error(result.error??"브라우저 로그인을 완료하지 못했습니다. 터미널에서 claude auth login을 실행해 주세요.");
+  loggingIn=false;if(selected==="claude")await choose("claude");
+ }catch(error){if(selected==="claude")element("setup").textContent=error.message;}
+ finally{loggingIn=false;render();}
+};
 element("start").onclick=()=>{maskSecret();render();void huddle?.start();};element("mute").onclick=()=>huddle?.mute();element("interrupt").onclick=()=>{void huddle?.interrupt();};element("stop").onclick=()=>{void huddle?.leave();};
 window.addEventListener("pagehide",()=>{maskSecret();generation++;checking?.abort();off?.();void huddle?.dispose();});
 try{selected=Object.hasOwn(names,localStorage.getItem("huddle-ai"))?localStorage.getItem("huddle-ai"):"codex";}catch{}

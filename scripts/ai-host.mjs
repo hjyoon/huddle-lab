@@ -88,6 +88,18 @@ export async function createAiHost({port=4184,cwd=process.cwd(),codex={},claude=
       }finally{configuring=false;mutation=undefined;}
       return;
     }
+    if(path==="/api/providers/claude/login"){
+      if(vpn){json(403,{error:"Claude 로그인은 이 Mac의 로컬 Huddle에서 할 수 있습니다."});return;}
+      if(req.method!=="POST"){json(405,{error:"Method not allowed."});return;}
+      if(req.headers.origin!==url||req.headers["content-type"]!=="application/json"){json(403,{error:"Same-origin login request required."});return;}
+      const entry=providers.get("claude");
+      if(!entry?.host){json(503,{error:"AI host is starting."});return;}
+      try{
+        const result=await fetch(`${entry.host.url}/claude/login`,{method:"POST",signal:AbortSignal.timeout(200000)});
+        json(result.status,await result.json());
+      }catch{json(504,{error:"브라우저 로그인을 완료하지 못했습니다. 터미널에서 claude auth login을 실행해 주세요."});}
+      return;
+    }
     if(path==="/api/providers"&&req.method==="GET"){
       json(200,[...providers].map(([id,entry])=>({id,name:entry.name})));return;
     }
@@ -107,7 +119,7 @@ export async function createAiHost({port=4184,cwd=process.cwd(),codex={},claude=
         if(!status.ok)throw new Error("Could not read the selected AI status.");
         const metadata=await status.json();
         const wsUrl=vpn?`${origin.replace("https:","wss:")}/voice/${remote?"openclaw-remote":id}`:`${entry.host.url.replace("http:","ws:")}/${id}`;
-        json(200,{...metadata,...(id==="openclaw"?{mode}:{}),id,name:entry.name,wsUrl});
+        json(200,{...metadata,canLogin:!vpn&&!!metadata.canLogin,...(id==="openclaw"?{mode}:{}),id,name:entry.name,wsUrl});
       }catch(error){json(200,{id,name:entry.name,ready:false,error:error.message});}
       return;
     }
