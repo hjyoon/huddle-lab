@@ -10,14 +10,25 @@ import { serveDemoFile } from "./serve-demo.mjs";
 export async function createLocalVoiceHost({id,name,port=0,cwd=process.cwd(),backend,entry,allowedOrigins=[]}={}) {
   if(!/^[a-z][a-z0-9-]*$/.test(id)||typeof name!=="string"||!backend)throw new Error("An identified voice backend is required.");
   if(!isAbsolute(cwd)||!(await stat(cwd)).isDirectory())throw new Error("Choose an existing absolute workspace.");
-  let url,active,checking,closingHost=false,paused=false;
+  let url,active,checking,closingHost=false,paused=false,login;
   const inspect=()=>checking??=(async()=>{try{return await backend.inspect();}finally{checking=undefined;}})();
+  const loginAbort=new AbortController();
+  const startLogin=()=>login??=(async()=>{try{await backend.login(loginAbort.signal);}finally{login=undefined;}})();
   const server=createServer(async(req,res)=>{
     if(req.headers.host!==new URL(url).host||(req.headers.origin&&req.headers.origin!==url)){res.writeHead(403).end();return;}
     const path=new URL(req.url,url).pathname;
     if(path===`/${id}/status`&&req.method==="GET"){
-      try{res.writeHead(200,{"Content-Type":"application/json","Cache-Control":"no-store"}).end(JSON.stringify({...await inspect(),busy:!!active}));}
+      try{res.writeHead(200,{"Content-Type":"application/json","Cache-Control":"no-store"}).end(JSON.stringify({...await inspect(),busy:!!active,canLogin:!!backend.login}));}
       catch{res.writeHead(503).end();}return;
+    }
+    if(path===`/${id}/login`&&backend.login){
+      const json=(status,value)=>res.writeHead(status,{"Content-Type":"application/json","Cache-Control":"no-store"}).end(JSON.stringify(value));
+      if(req.method!=="POST"){json(405,{error:"Method not allowed."});return;}
+      if(req.headers.origin){json(403,{error:"Login is requested through the selector host."});return;}
+      if(active||closingHost){json(409,{error:"통화 종료 후 로그인해 주세요."});return;}
+      try{await startLogin();json(200,{signedIn:true});}
+      catch(error){json(closingHost?503:400,{error:String(error.message??error).slice(0,500)});}
+      return;
     }
     if(path==="/"){if(!entry){res.writeHead(404).end();return;}req.url=`/examples/browser/${entry}`;}
     await serveDemoFile(req,res);
@@ -123,6 +134,6 @@ export async function createLocalVoiceHost({id,name,port=0,cwd=process.cwd(),bac
       paused=true;
       return()=>{paused=false;};
     },
-    async close(){closingHost=true;await active?.close();for(const client of ws.clients)client.terminate();await new Promise(done=>ws.close(done));await new Promise(done=>{server.close(done);server.closeAllConnections();});},
+    async close(){closingHost=true;loginAbort.abort(new Error("Huddle host closed."));await login?.catch(()=>{});await active?.close();for(const client of ws.clients)client.terminate();await new Promise(done=>ws.close(done));await new Promise(done=>{server.close(done);server.closeAllConnections();});},
   };
 }

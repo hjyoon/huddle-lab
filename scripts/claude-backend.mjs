@@ -6,16 +6,30 @@ export { encodeWav, decodeWav } from "./local-speech.mjs";
 export function createLocalClaudeBackend({cwd=process.cwd(),runtimeRoot=resolve(cwd,".huddle-runtime/claude"),binary="claude",
   python=join(runtimeRoot,"venv/bin/python"),model="base",language="ko",voice="Yuna",run=runOwned}={}) {
   const speech=createLocalSpeechBackend({cwd,runtimeRoot,python,model,language,voice,run});
+  /** `claude auth status` prints its JSON and exits 1 when signed out. */
+  async function signedIn(){
+    let output;
+    try{output=await run(binary,["auth","status"],{cwd,timeoutMs:10000,captureFailureOutput:true});}
+    catch(error){if(!error.stdout)throw error;output=error.stdout;}
+    return !!JSON.parse(output).loggedIn;
+  }
   return {
     ...speech,
+    /** Opens the system browser through Claude Code's own OAuth flow; never re-signs an existing login. */
+    async login(signal){
+      if(await signedIn())return;
+      try{await run(binary,["auth","login"],{cwd,signal,timeoutMs:180000,captureFailureOutput:true});}
+      catch(error){if(signal?.aborted)throw error;}
+      if(!await signedIn())throw new Error("브라우저 로그인을 완료하지 못했습니다. 터미널에서 claude auth login을 실행해 주세요.");
+    },
     async inspect() {
       const result={workspace:cwd,engine:"Claude Code",tools:false};
       try {
         result.version=(await run(binary,["--version"],{cwd,timeoutMs:5000})).trim();
-        const auth=JSON.parse(await run(binary,["auth","status"],{cwd,timeoutMs:10000}));result.signedIn=!!auth.loggedIn;
+        result.signedIn=await signedIn();
+        if(!result.signedIn){result.ready=false;result.needsLogin=true;result.error="Claude에 로그인되어 있지 않습니다.";return result;}
         Object.assign(result,await speech.inspectSpeech());
-        result.ready=result.signedIn;
-        if(!result.signedIn)result.error="Run claude auth login before starting voice.";
+        result.ready=true;
       }catch(error){result.ready=false;result.error=error.message;}
       return result;
     },
