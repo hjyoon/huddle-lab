@@ -50,7 +50,13 @@ export async function createLocalVoiceHost({id,name,port=0,cwd=process.cwd(),bac
       if(session.closing)return session.closing;
       cancel();
       session.closing=Promise.resolve().then(async()=>{
-        try{await session.opening?.catch(()=>{});await session.tail.catch(()=>{});}
+        try{
+          await session.opening?.catch(()=>{});
+          await session.tail.catch(()=>{});
+          await session.conversation?.close();
+        }catch(error){
+          send({type:"error",message:String(error.message??error).slice(0,1000)});
+        }
         finally{send({type:"voice/closed"});client.close();if(active===session)active=undefined;}
       });return session.closing;
     };
@@ -75,7 +81,7 @@ export async function createLocalVoiceHost({id,name,port=0,cwd=process.cwd(),bac
           if(!text.trim()){emit({type:"response-ended"});emit({type:"activity",activity:"listening"});return;}
           if(text.length>4000)throw new Error("Transcription exceeded the limit.");
           retain({role:"user",content:text});emit({type:"transcript",speaker:"user",text});
-          const answer=await backend.reply([...session.history],signal);if(!current(job))return;
+          const answer=await (session.conversation??backend).reply([...session.history],signal);if(!current(job))return;
           if(typeof answer!=="string"||!answer.trim()||answer.length>1200)throw new Error(`Invalid ${name} spoken response.`);
           const audio=await backend.synthesize(answer,signal);if(!current(job))return;
           if(!audio.length||audio.length>48000*60||audio.some(value=>!Number.isFinite(value)||Math.abs(value)>1))throw new Error("Invalid TTS audio.");
@@ -109,6 +115,8 @@ export async function createLocalVoiceHost({id,name,port=0,cwd=process.cwd(),bac
         if(message.type==="voice/open"){
           if(session.opening)throw new Error(`${name} voice is already opening.`);
           session.opening=(async()=>{const status=await inspect();if(!status.ready)throw new Error(status.error??`${name} voice is not ready.`);
+            if (session.closing) return;
+            session.conversation = await backend.openSession?.();
             if(!session.closing){session.opened=true;send({type:"voice/ready"});}})();
           void session.opening.catch(fail);return;
         }

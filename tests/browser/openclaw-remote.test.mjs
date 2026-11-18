@@ -8,16 +8,27 @@ import { createRemoteOpenClawBackend } from "../../scripts/openclaw-remote-backe
 import { providerFixtures } from "../fixtures/ai-backends.mjs";
 
 test("remote inference barge-in cancels the owned Gateway run before submitting the next voice turn",{timeout:25000},async t=>{
- const events=[];let firstRun,active,utterance=0;
+ const events=[];let firstRun,active,sessionKey,utterance=0;
  const backend=createRemoteOpenClawBackend({remote:{url:"wss://gateway.example/",token:"test-token"},run:async(binary,args,options)=>{
   if(args[0]!=="gateway")return binary==="say"?"Yuna ko_KR":"{}";
   const method=args[2],params=JSON.parse(args[args.indexOf("--params")+1]);events.push({method,params});
-  if(method==="health")return JSON.stringify({ok:true,defaultAgentId:"main"});
+  if(method==="health")return JSON.stringify({ok:true,defaultAgentId:"main",agents:[{agentId:"main"},{agentId:"huddle-voice"}]});
+  if(method==="sessions.create"){
+   assert.equal(sessionKey,undefined,"one Gateway session belongs to the browser call");
+   sessionKey=params.key;
+   return JSON.stringify({ok:true,key:sessionKey,sessionId:"gateway-voice-session",runStarted:false});
+  }
+  if(method==="tools.effective"){
+   assert.equal(params.sessionKey,sessionKey);
+   return JSON.stringify({agentId:"huddle-voice",profile:"full",groups:[]});
+  }
   if(method==="agent"){
+   assert.equal(params.sessionKey,sessionKey);assert.equal(params.deliver,false);
    assert.equal(active,undefined,"the previous Gateway run must be terminal");active=params.idempotencyKey;firstRun??=active;
    return JSON.stringify({status:"accepted",runId:active});
   }
   if(method==="chat.abort"){
+   assert.equal(params.sessionKey,sessionKey);
    assert.equal(params.runId,firstRun);assert.equal(params.runId,active);active=undefined;
    return JSON.stringify({ok:true,aborted:true,runIds:[params.runId]});
   }
@@ -28,6 +39,10 @@ test("remote inference barge-in cancels the owned Gateway run before submitting 
     await new Promise((_,reject)=>options.signal.addEventListener("abort",()=>reject(options.signal.reason),{once:true}));
    }
    active=undefined;return JSON.stringify({status:"ok",terminalReply:{disposition:"visible",text:"두 번째 응답"}});
+  }
+  if(method==="sessions.reclaim"){
+   assert.equal(params.key,sessionKey);assert.equal(active,undefined);
+   return JSON.stringify({ok:true,key:sessionKey,sessionId:"gateway-voice-session",placement:{state:"reclaimed"}});
   }
   throw new Error("Unexpected RPC");
  }});
@@ -58,6 +73,9 @@ test("remote inference barge-in cancels the owned Gateway run before submitting 
  assert.ok(events.findIndex(e=>e.method==="chat.abort")<events.findLastIndex(e=>e.method==="agent"));
  assert.ok(await page.evaluate(()=>probe.buffers)>0);assert.equal(await page.locator("#error").textContent(),"");
  await page.locator("#stop").click();await page.waitForFunction(()=>document.getElementById("status").textContent==="대기 중");await page.evaluate(()=>probe.virtual.close());
+ await waitFor(()=>events.some(e=>e.method==="sessions.reclaim"));
+ assert.equal(events.filter(e=>e.method==="sessions.create").length,1);
+ assert.equal(events.filter(e=>e.method==="sessions.reclaim").length,1);
  assert.equal(await page.evaluate(()=>probe.contexts.every(c=>c.state==="closed")&&probe.tracks.every(t=>t.readyState==="ended")),true);
  assert.deepEqual(errors,[]);
 });

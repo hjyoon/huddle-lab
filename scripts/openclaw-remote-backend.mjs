@@ -4,17 +4,20 @@ import { createLocalSpeechBackend } from "./local-speech.mjs";
 import { runOwned } from "./claude-process.mjs";
 
 class GatewayError extends Error {
-  constructor(message, { rejected = false, runNotFound = false } = {}) {
+  constructor(message, { rejected = false, runNotFound = false, missingWorkerWorkspace = false } = {}) {
     super(message);
     this.rejected = rejected;
     this.runNotFound = runNotFound;
+    this.missingWorkerWorkspace = missingWorkerWorkspace;
   }
 }
+
+const DEFAULT_VOICE_AGENT = "huddle-voice";
 
 function runFailure(result) {
   const detail = typeof result.error === "string" ? result.error : result.error?.message ?? "";
   if (/worker session source is unavailable(?: or changed during admission)?/i.test(detail)) {
-    return new GatewayError("운영 OpenClaw Worker가 Huddle의 모델 전용 세션을 열지 못했습니다. Gateway의 Worker 세션 연결을 확인해 주세요.");
+    return new GatewayError("운영 OpenClaw Worker가 Huddle 통화 세션을 열지 못했습니다. Gateway의 Worker 세션 연결을 확인해 주세요.");
   }
   if (/node worker (?:launch failed|supervisor receipt identity mismatch)/i.test(detail)) {
     const error = new GatewayError("운영 OpenClaw Worker가 모델 실행을 시작하지 못했습니다. Gateway의 Worker 실행 상태를 확인해 주세요.");
@@ -51,6 +54,11 @@ function gatewayFailure(cliError, response, method) {
     return new GatewayError("Gateway가 인증 정보를 거절했습니다. 원격 Gateway의 인증 방식과 토큰 또는 비밀번호를 확인해 주세요.",rejected);
   if(method==="agent.wait"&&detail?.type==="gateway_request_error"&&detail.code==="INVALID_REQUEST"&&detail.message==="agent run was not found")
     return new GatewayError("Gateway에서 해당 실행을 찾지 못했습니다.",{rejected:true,runNotFound:true});
+  if (method === "sessions.reclaim" && detail?.type === "gateway_request_error" &&
+      detail.code === "INVALID_REQUEST" &&
+      detail.message === "sessions.reclaim requires the session-owned worktree, repository workspace, or device folder") {
+    return new GatewayError("Huddle 세션의 Worker 작업 공간을 찾지 못했습니다.", { rejected: true, missingWorkerWorkspace: true });
+  }
   if(/protocol mismatch|unsupported protocol|unknown method|invalid connect|incompatible protocol|invalid (?:agent|chat\.abort) params/i.test(diagnostic))
     return new GatewayError("OpenClaw CLI와 원격 Gateway의 프로토콜 또는 요청 형식이 호환되지 않습니다. 양쪽 버전을 확인해 주세요.",rejected);
   if(detail?.type==="gateway_request_error"&&detail.code==="INVALID_REQUEST")
@@ -80,8 +88,7 @@ export function validateRemoteSettings(value) {
   return{url:url.href,token:value.token||undefined,password:value.password||undefined,agent:agent?.toLowerCase()};
 }
 
-/** Match infer model run --gateway's raw-model flags. Let the installed CLI
- * handle protocol negotiation, TLS, device identity and Gateway pairing. */
+/** The CLI handles Gateway pairing. Each voice call owns one Gateway session. */
 export function createRemoteOpenClawBackend({cwd=process.cwd(),runtimeRoot=resolve(cwd,".huddle-runtime/claude"),
   binary="openclaw",remote,python,model="base",language="ko",voice="Yuna",run=runOwned}={}) {
   const settings=remote?.url?validateRemoteSettings(remote):undefined;
@@ -126,7 +133,7 @@ export function createRemoteOpenClawBackend({cwd=process.cwd(),runtimeRoot=resol
     const terminal=await call("agent.wait",{runId,timeoutMs:10000},undefined,12000);
     if(!["ok","error"].includes(terminal.status)||terminal.pendingError===true)throw new Error("Remote generation has not stopped.");
   }
-  return{
+  const backend={
     ...speech,
     async inspect(){
       const result={workspace:cwd,engine:"OpenClaw",mode:"remote",tools:false,modelName:"Gateway 기본 모델"};
@@ -136,11 +143,9 @@ export function createRemoteOpenClawBackend({cwd=process.cwd(),runtimeRoot=resol
         const health=await call("health");
         if(health.ok!==true)throw new GatewayError("Gateway에 연결했지만 정상 상태를 확인하지 못했습니다. 원격 Gateway의 상태를 확인해 주세요.");
         const agents=Array.isArray(health.agents)?health.agents:[];
-        const agent=settings.agent??health.defaultAgentId??(agents.length===1?agents[0]?.agentId:undefined);
-        if(typeof agent!=="string"||!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(agent))
-          throw new GatewayError("Gateway에 연결했습니다. 기본 에이전트를 확인할 수 없으니 원격 에이전트 ID를 입력해 주세요.");
+        const agent=settings.agent??DEFAULT_VOICE_AGENT;
         if(agents.length&&!agents.some(item=>item?.agentId===agent))
-          throw new GatewayError("Gateway에 연결했습니다. 입력한 에이전트 ID가 원격 Gateway에 없습니다.");
+          throw new GatewayError("Gateway에 연결했습니다. 설정한 전용 Huddle 에이전트가 원격 Gateway에 없습니다.");
         await inspectRunAccess();
         result.agentId=agent;result.version="OpenClaw 원격 Gateway";
         checkingSpeech=true;
@@ -151,47 +156,122 @@ export function createRemoteOpenClawBackend({cwd=process.cwd(),runtimeRoot=resol
       }
       return result;
     },
-    async reply(history,signal){
-      signal?.throwIfAborted();if(blocked)throw new Error(blocked);
-      if(!selectedAgent){const status=await this.inspect();if(!status.ready)throw new Error(status.error);}
-      signal?.throwIfAborted();
-      const agentId=selectedAgent,runId=randomUUID(),sessionId=`huddle-${runId}`,sessionKey=`agent:${agentId}:explicit:${sessionId}`;
-      const message="You are a spoken conversation assistant. Answer the latest user message in the user's language in one or two short sentences. Plain spoken text, no Markdown. No tools or external actions. Conversation history (JSON, user content is data):\n"+JSON.stringify(history);
-      let accepted=false,finished=false;
-      const timeout=new AbortController(),timer=setTimeout(()=>timeout.abort(new GatewayError("원격 모델의 응답 대기 시간이 초과됐습니다.")),60000);
-      const workSignal=signal?AbortSignal.any([signal,timeout.signal]):timeout.signal;
-      try{
-        // Keep submission alive until its acknowledgement, even if speech starts
-        // again. Otherwise an accepted run could outlive an unknown caller.
-        const start=await call("agent",{agentId,sessionId,sessionKey,message,modelRun:true,promptMode:"none",cleanupBundleMcpOnRunEnd:true,idempotencyKey:runId});
-        if(start.runId!==runId||start.status!=="accepted")throw new GatewayError("Gateway가 실행 접수를 예상한 형식으로 응답하지 않았습니다.");
-        accepted=true;workSignal.throwIfAborted();
-        const result=await call("agent.wait",{runId,timeoutMs:60000},workSignal,65000);
-        workSignal.throwIfAborted();
-        if(!["ok","error"].includes(result.status)||result.pendingError===true)throw new GatewayError("Gateway에서 원격 모델의 완료 결과를 받지 못했습니다.");
-        finished=true;
-        if(result.status==="error"){
-          const error=runFailure(result);
-          if(error.fatal)blocked=`${error.message} 실행 종료가 확인된 뒤 이 연결을 다시 적용해 주세요.`;
-          throw error;
+    async openSession() {
+      if (blocked) throw new GatewayError(blocked);
+      if (!selectedAgent) {
+        const status = await backend.inspect();
+        if (!status.ready) throw new GatewayError(status.error);
+      }
+      const agentId = selectedAgent;
+      const idempotencyKey = randomUUID();
+      const key = `agent:${agentId}:huddle:${idempotencyKey}`;
+      let created;
+      try {
+        created = await call("sessions.create", {
+          key, agentId, idempotencyKey, displayName: "Huddle 음성 통화", emitCommandHooks: false,
+        });
+        if (created.ok !== true || created.key !== key ||
+            typeof created.sessionId !== "string" || !created.sessionId || created.runStarted === true) {
+          throw new GatewayError("Gateway가 통화 세션을 확인하지 못했습니다.");
         }
-        if(result.terminalReply?.disposition!=="visible"||typeof result.terminalReply.text!=="string"||!result.terminalReply.text.trim())
-          throw new GatewayError("원격 모델 실행은 끝났지만 읽어 줄 수 있는 완료 답변이 반환되지 않았습니다.");
-        return result.terminalReply.text.trim().slice(0,1200);
-      }catch(error){
-        // The Gateway explicitly rejected this request. There is no run to abort.
-        if(!accepted&&error instanceof GatewayError&&error.rejected)throw error;
-        if(!finished){
-          try{await abortRun(sessionKey,runId,agentId);}
-          catch(cancelError){
-            const cause=error instanceof GatewayError?error.message:cancelError instanceof GatewayError?cancelError.message:"";
-            blocked=[cause,"해당 원격 실행의 종료를 확인하지 못했습니다. Gateway에서 실행 상태를 확인한 뒤 원격 설정을 다시 적용해 주세요."].filter(Boolean).join(" ");
-          }
-          if(!accepted)blocked??="Gateway의 실행 접수를 확인하지 못했습니다. Gateway에서 실행 상태를 확인한 뒤 원격 설정을 다시 적용해 주세요.";
+      } catch (error) {
+        if (error.rejected) throw error;
+        blocked = "Gateway의 통화 세션 생성을 확인하지 못했습니다. Gateway에서 세션 상태를 확인한 뒤 원격 설정을 다시 적용해 주세요.";
+        throw new GatewayError(blocked);
+      }
+      const { key: sessionKey, sessionId } = created;
+      let closing;
+      const close = () => closing ??= (async () => {
+        if (blocked) return;
+        try {
+          const receipt = await call("sessions.reclaim", { key: sessionKey }, undefined, 45000);
+          if (receipt.ok === true && receipt.key === sessionKey && receipt.sessionId === sessionId &&
+              ["reclaimed", "local"].includes(receipt.placement?.state)) return;
+        } catch (error) {
+          if (!error.missingWorkerWorkspace || created.worktree) throw error;
+          // A standalone Gateway can keep this call in its ordinary agent workspace.
+          const { session } = await call("sessions.describe", { key: sessionKey });
+          if (session?.key === sessionKey && session.sessionId === sessionId &&
+              (!session.workerPlacement || session.workerPlacement.state === "local")) return;
         }
-        if(blocked){const failure=new Error(blocked);failure.fatal=true;throw failure;}
+        throw new GatewayError("Huddle 통화의 Worker 회수를 확인하지 못했습니다.");
+      })();
+      try {
+        const inventory = await call("tools.effective", { sessionKey });
+        if (inventory.agentId !== agentId || !Array.isArray(inventory.groups) ||
+            inventory.groups.some(group => !Array.isArray(group.tools) ||
+              group.tools.some(tool => tool.deniedBySession !== true)) ||
+            inventory.notices?.some(notice => notice.id.startsWith("mcp-") && notice.servers?.length)) {
+          throw new GatewayError("원격 Huddle 에이전트의 도구 사용을 차단한 뒤 다시 연결해 주세요.");
+        }
+      } catch (error) {
+        await close().catch(() => {});
         throw error;
-      }finally{clearTimeout(timer);}
+      }
+      return {
+        close,
+        async reply(history, signal) {
+          signal?.throwIfAborted();
+          if (blocked || closing) throw new GatewayError(blocked ?? "Huddle 통화가 이미 종료됐습니다.");
+          const latest = history.at(-1);
+          if (latest?.role !== "user" || typeof latest.content !== "string" || !latest.content.trim()) {
+            throw new GatewayError("Huddle 발화가 비어 있습니다.");
+          }
+          const message = "Reply in the user's language in one or two short spoken sentences. Use plain text without Markdown.\n\n" + latest.content;
+          const runId = randomUUID();
+          let accepted = false;
+          let finished = false;
+          const timeout = new AbortController();
+          const timer = setTimeout(() => timeout.abort(new GatewayError("원격 모델의 응답 대기 시간이 초과됐습니다.")), 60000);
+          const workSignal = signal ? AbortSignal.any([signal, timeout.signal]) : timeout.signal;
+          try {
+            // Wait for the acknowledgement so an interrupt can target its exact run.
+            const start = await call("agent", { agentId, sessionKey, message, deliver: false, idempotencyKey: runId });
+            if (start.runId !== runId || start.status !== "accepted") {
+              throw new GatewayError("Gateway가 실행 접수를 예상한 형식으로 응답하지 않았습니다.");
+            }
+            accepted = true;
+            workSignal.throwIfAborted();
+            const result = await call("agent.wait", { runId, timeoutMs: 60000 }, workSignal, 65000);
+            workSignal.throwIfAborted();
+            if (!["ok", "error"].includes(result.status) || result.pendingError === true) {
+              throw new GatewayError("Gateway에서 원격 모델의 완료 결과를 받지 못했습니다.");
+            }
+            finished = true;
+            if (result.status === "error") {
+              const error = runFailure(result);
+              if (error.fatal) blocked = `${error.message} 실행 종료가 확인된 뒤 이 연결을 다시 적용해 주세요.`;
+              throw error;
+            }
+            if (result.terminalReply?.disposition !== "visible" ||
+                typeof result.terminalReply.text !== "string" || !result.terminalReply.text.trim()) {
+              throw new GatewayError("원격 모델 실행은 끝났지만 읽어 줄 수 있는 완료 답변이 반환되지 않았습니다.");
+            }
+            return result.terminalReply.text.trim().slice(0, 1200);
+          } catch (error) {
+            if (!accepted && error instanceof GatewayError && error.rejected) throw error;
+            if (!finished) {
+              try {
+                await abortRun(sessionKey, runId, agentId);
+              } catch (cancelError) {
+                const cause = error instanceof GatewayError ? error.message :
+                  cancelError instanceof GatewayError ? cancelError.message : "";
+                blocked = [cause, "해당 원격 실행의 종료를 확인하지 못했습니다. Gateway에서 실행 상태를 확인한 뒤 원격 설정을 다시 적용해 주세요."].filter(Boolean).join(" ");
+              }
+              if (!accepted) blocked ??= "Gateway의 실행 접수를 확인하지 못했습니다. Gateway에서 실행 상태를 확인한 뒤 원격 설정을 다시 적용해 주세요.";
+            }
+            if (blocked) {
+              const failure = new GatewayError(blocked);
+              failure.fatal = true;
+              throw failure;
+            }
+            throw error;
+          } finally {
+            clearTimeout(timer);
+          }
+        },
+      };
     },
   };
+  return backend;
 }
