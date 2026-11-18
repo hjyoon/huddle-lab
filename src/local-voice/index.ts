@@ -1,5 +1,6 @@
 import type { AgentVoiceProvider } from "../agent-voice/types.js";
 import { createSpeechGate } from "./vad.js";
+import { isVoiceWebSocket } from "../voice-websocket.js";
 
 /** Host-owned text inference + local STT/TTS. Binary frames are 960 Float32LE
  * samples; response frames prepend an unsigned little-endian turn sequence. */
@@ -7,8 +8,7 @@ export type LocalVoiceOptions = { url: string; startRms?: number; endRms?: numbe
 export function createLocalVoiceProvider(options: LocalVoiceOptions & {id:string;name:string}): AgentVoiceProvider {
   const name=options.name;
   const url = new URL(options.url);
-  if (url.protocol !== "ws:" || !["127.0.0.1", "localhost", "[::1]"].includes(url.hostname) ||
-    url.username || url.password || url.search || url.hash) throw new Error(`${name} voice requires a loopback WebSocket host.`);
+  if (!isVoiceWebSocket(url)) throw new Error(`${name} voice requires a loopback or same-origin secure WebSocket host.`);
   return { id: options.id, name, async open(owner) {
     owner.signal.throwIfAborted();
     const socket = new WebSocket(url); socket.binaryType = "arraybuffer";

@@ -16,18 +16,27 @@ npm run demo
 `http://127.0.0.1:4184/`에서 **대화할 AI**를 고르고 **통화 시작**을 누릅니다.
 선택한 AI에 맞춰 연결 상태·음성 처리 안내와 통화 버튼이 바뀝니다. 통화 중에는 선택을 잠그며,
 종료 후 다른 AI로 바꿀 수 있습니다. 선택을 바꾸면 이전 연결과 화면의 대화 기록을 정리합니다.
+OpenClaw는 **로컬 / 원격 Gateway**를 선택할 수 있습니다. 원격 모드에서는 화면에 Gateway 주소,
+토큰 또는 비밀번호, 에이전트 ID(선택)를 입력하고 **저장 · 연결 확인**을 누릅니다.
+인증 정보는 이 Mac에 저장되어 서버를 재시작해도 사용할 수 있습니다. 지우려면 **저장된 인증 삭제**를 누릅니다.
 
 | AI | 연결 방식 | 준비 |
 | --- | --- | --- |
 | Codex | 로컬 Codex의 실시간 WebRTC 음성 | Codex CLI와 기존 로그인 |
 | Claude | 로컬 Whisper → Claude Code → macOS 음성 합성 | `npm run setup:voice`, Claude 로그인, macOS |
-| OpenClaw | 로컬 Whisper → OpenClaw에 설정된 모델 → macOS 음성 합성 | `npm run setup:voice`, OpenClaw 모델·인증 설정, macOS |
+| OpenClaw | 로컬 Whisper → 로컬 CLI 또는 원격 Gateway의 모델 → macOS 음성 합성 | `npm run setup:voice`, OpenClaw CLI, 모델 인증 또는 원격 Gateway 인증, macOS |
 
 [Codex 연결 안내](docs/codex-voice.md), [Claude 연결 안내](docs/claude-voice.md), [OpenClaw 연결 안내](docs/openclaw-voice.md)에 설정과 검증 범위를 정리했습니다.
 현재 환경의 Claude 실제 모델 응답은 인증 갱신 후 확인해야 하며, 구현·자동 검증과 로컬 음성 엔진 검증을 완료했습니다.
 
 각 제공자의 독립 화면은 `npm run demo:codex`(4182), `npm run demo:claude`(4183)로 실행합니다.
 모델 없는 연결 테스트는 `npm run demo:agent`(4181)입니다. 통합 화면 포트는 `PORT=4194 npm run demo`로 바꿉니다.
+
+WireGuard를 사용하는 Mac에서는 `.huddle-runtime/wireguard/address`에 터널의 IPv4 주소를 지정할 수 있습니다.
+같은 폴더의 `server-cert.pem`과 `server-key.pem`으로 그 주소의 HTTPS 수신기를 시작합니다.
+인증서의 SAN에 터널 IP를 넣고, 다른 기기의 브라우저가 발급 CA를 신뢰하도록 설정한 뒤 `https://<WireGuard IP>:4184/`를 엽니다.
+브라우저 음성 연결도 같은 주소를 사용합니다.
+저장된 OpenClaw 인증은 이 Mac의 `http://127.0.0.1:4184/`에서 관리합니다.
 
 ## 실제 AI 제공자 연결 지점
 

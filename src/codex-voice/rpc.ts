@@ -1,3 +1,5 @@
+import { isVoiceWebSocket } from "../voice-websocket.js";
+
 export type CodexNotification = { method: string; params?: Record<string, unknown> };
 export type CodexVoiceSession = {
   threadId: string;
@@ -19,9 +21,7 @@ export function abortable<T>(operation: Promise<T>, signal: AbortSignal): Promis
  * surface. Authentication tokens never cross this local browser connection. */
 export function createCodexLocalConnector(url: string) {
   const target = new URL(url);
-  if (target.protocol !== "ws:" || !["127.0.0.1", "localhost", "[::1]"].includes(target.hostname) ||
-    target.username || target.password || target.search || target.hash)
-    throw new Error("The Codex companion must use a loopback WebSocket URL.");
+  if (!isVoiceWebSocket(target)) throw new Error("The Codex companion must use a loopback or same-origin secure WebSocket URL.");
   return async (signal: AbortSignal): Promise<CodexVoiceSession> => {
     signal.throwIfAborted();
     const socket = new WebSocket(target);

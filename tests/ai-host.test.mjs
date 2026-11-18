@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
+import { lstat, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 import { WebSocket } from "ws";
 import { createAiHost } from "../scripts/ai-host.mjs";
+import { createOpenClawRemoteStore } from "../scripts/openclaw-remote-store.mjs";
 import { providerFixtures } from "./fixtures/ai-backends.mjs";
 async function socket(url,origin){const ws=new WebSocket(url,{origin});await new Promise((r,j)=>{ws.once('open',r);ws.once('error',j);});return ws;}
 const message=(ws)=>new Promise(r=>ws.once('message',raw=>r(JSON.parse(raw))));
@@ -40,3 +44,62 @@ test('closing the selector host cancels an active provider job before releasing 
   assert.ok(events.some(e=>e.type==='response-started'&&e.responseId.startsWith('openclaw:')));
   assert.ok(events.some(e=>e.type==='audio'&&e.seq===1));
  });
+
+test('remote UI settings require same-origin JSON, omit credentials in reads and lock during a call',async t=>{
+ const f=providerFixtures(),host=await createAiHost({port:0,...f,openclawRemote:{backend:f.openclaw.backend}});t.after(()=>host.close());
+ const path=host.url+'/api/providers/openclaw/remote';
+ const settings={url:'wss://remote.example/',token:'never-echo-this-token',agent:'main'};
+ const save=(value,origin=host.url)=>fetch(path,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify(value)});
+ assert.equal((await save(settings,'https://foreign.example')).status,403);
+ assert.equal((await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(settings)})).status,403);
+ assert.equal((await save({...settings,url:'ws://remote.example'})).status,400);
+ const oversized=await save({...settings,token:'x'.repeat(13000)});assert.equal(oversized.status,400);
+ const applied=await save(settings);assert.equal(applied.status,200);assert.equal((await applied.text()).includes(settings.token),false);
+ const config=await(await fetch(path)).json();assert.deepEqual(config,{url:settings.url,agent:'main',configured:true,hasCredentials:true,authType:'token'});
+ assert.equal((await save({url:'wss://different.example',agent:'main',authType:'token',reuseSaved:true})).status,400);
+ assert.equal((await save({url:settings.url,agent:'alternate',authType:'token',reuseSaved:true})).status,200);
+ const local=await(await fetch(host.url+'/api/providers/openclaw')).json(),remote=await(await fetch(host.url+'/api/providers/openclaw?mode=remote')).json();
+ assert.equal(remote.mode,'remote');assert.notEqual(remote.wsUrl,local.wsUrl);assert.equal(JSON.stringify(remote).includes(settings.token),false);
+ const client=await socket(remote.wsUrl,host.url);t.after(()=>client.terminate());let next=message(client);client.send(JSON.stringify({type:'voice/open'}));await next;
+ assert.equal((await save({...settings,url:'wss://different.example'})).status,409);
+ assert.equal((await fetch(path,{method:'DELETE',headers:{Origin:host.url}})).status,409);
+ next=message(client);client.send(JSON.stringify({type:'voice/close'}));await next;
+ const changed=await save({...settings,url:'wss://different.example'});assert.equal(changed.status,200);
+ const updated=await(await fetch(host.url+'/api/providers/openclaw?mode=remote')).json();assert.notEqual(updated.wsUrl,remote.wsUrl);
+ assert.equal((await fetch(host.url+'/api/providers/openclaw?mode=unknown')).status,400);
+});
+
+test('saved remote authentication survives server restart and deletion survives another restart',async t=>{
+ const directory=await mkdtemp(join(tmpdir(),'huddle-remote-store-test-'));
+ const f=providerFixtures();
+ const start=()=>createAiHost({port:0,...f,remoteStore:createOpenClawRemoteStore(directory),openclawRemote:{backend:f.openclaw.backend}});
+ let host=await start();
+ t.after(async()=>{await host.close();await rm(directory,{recursive:true,force:true});});
+ const path=()=>`${host.url}/api/providers/openclaw/remote`;
+ const settings={url:'wss://remote.example/',password:'saved-test-password',agent:'main'};
+ const saved=await fetch(path(),{method:'POST',headers:{Origin:host.url,'Content-Type':'application/json'},body:JSON.stringify(settings)});
+ assert.equal(saved.status,200);
+ const file=join(directory,'openclaw-remote.json');
+ if(process.platform!=='win32')assert.equal((await lstat(file)).mode&0o777,0o600);
+ assert.equal((await createOpenClawRemoteStore(directory).load()).password,settings.password);
+ await host.close();host=await start();
+ const restored=await(await fetch(path())).text();
+ assert.equal(JSON.parse(restored).hasCredentials,true);
+ assert.equal(JSON.parse(restored).url,settings.url);
+ assert.equal(restored.includes(settings.password),false);
+ const reveal=origin=>fetch(path()+'/reveal',{method:'POST',headers:{...(origin?{Origin:origin}:{}),'Content-Type':'application/json'},body:'{}'});
+ assert.equal((await fetch(path()+'/reveal')).status,405);
+ assert.equal((await reveal()).status,403);
+ assert.equal((await reveal('https://foreign.example')).status,403);
+ const revealed=await reveal(host.url);assert.equal(revealed.status,200);assert.equal(revealed.headers.get('cache-control'),'no-store');
+ assert.deepEqual(await revealed.json(),{url:settings.url,authType:'password',secret:settings.password});
+ assert.equal((await fetch(host.url+'/.huddle-runtime/openclaw-remote.json')).status,404);
+ assert.equal((await(await fetch(host.url+'/api/providers/openclaw?mode=remote')).json()).ready,true);
+ assert.equal((await fetch(path(),{method:'DELETE',headers:{Origin:'https://foreign.example'}})).status,403);
+ assert.equal((await fetch(path(),{method:'DELETE',headers:{Origin:host.url}})).status,200);
+ assert.equal((await reveal(host.url)).status,404);
+ assert.equal((await(await fetch(host.url+'/api/providers/openclaw?mode=remote')).json()).ready,false);
+ await assert.rejects(lstat(file),{code:'ENOENT'});
+ await host.close();host=await start();
+ assert.equal((await(await fetch(path())).json()).hasCredentials,false);
+});

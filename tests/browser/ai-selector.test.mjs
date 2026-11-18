@@ -5,7 +5,7 @@ import { chromium } from "playwright";
 import { createAiHost } from "../../scripts/ai-host.mjs";
 import { providerFixtures } from "../fixtures/ai-backends.mjs";
 let browser,host,fixtures;
-before(async()=>{fixtures=providerFixtures();host=await createAiHost({port:0,...fixtures});browser=await chromium.launch({channel:process.env.HUDDLE_BROWSER_CHANNEL??'chrome',headless:true,
+before(async()=>{fixtures=providerFixtures();host=await createAiHost({port:0,...fixtures,openclawRemote:{backend:fixtures.openclaw.backend}});browser=await chromium.launch({channel:process.env.HUDDLE_BROWSER_CHANNEL??'chrome',headless:true,
  args:['--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream','--autoplay-policy=no-user-gesture-required','--mute-audio']});});
 after(async()=>{await browser?.close();await host?.close();});
 async function pageFor(t){const page=await browser.newPage();t.after(()=>page.close());const errors=[];page.on('pageerror',e=>errors.push(e.message));t.after(()=>assert.deepEqual(errors,[]));return page;}
@@ -24,6 +24,43 @@ test('user selects the AI, only that provider starts, and selection unlocks afte
  assert.equal(await page.locator('#provider').isDisabled(),true);await page.locator('#stop').click();await page.waitForFunction(()=>document.getElementById('status').textContent==='대기 중');
  await page.reload();await page.waitForFunction(()=>!document.getElementById('start').disabled);assert.equal(await page.locator('#provider').inputValue(),'openclaw');
  await page.locator('#provider').selectOption('codex');await page.waitForFunction(()=>document.getElementById('start').textContent==='Codex와 통화 시작'&&!document.getElementById('start').disabled);
+});
+test('remote credentials stay masked, can be shown after reload, and can be removed',{timeout:20000},async t=>{
+ const page=await pageFor(t);await page.goto(host.url);await page.locator('#provider').selectOption('openclaw');await page.locator('#openclaw-mode').selectOption('remote');
+ await page.locator('#remote-settings').waitFor({state:'visible'});
+ const secret=page.locator('#remote-secret'),eye=page.locator('#remote-secret-toggle'),value='fixture-secret';
+ await page.locator('#remote-url').fill('wss://gateway.example/');await page.locator('#remote-auth-type').selectOption('password');await secret.fill(value);await page.locator('#remote-agent').fill('voice');
+ await eye.click();assert.equal(await secret.getAttribute('type'),'text');assert.equal(await secret.inputValue(),value);
+ await eye.click();assert.equal(await secret.getAttribute('type'),'password');
+ assert.equal(await page.locator('#start').isDisabled(),true);
+ await page.locator('#remote-apply').click();await page.waitForFunction(()=>!document.getElementById('start').disabled);
+ assert.equal(await secret.inputValue(),value);assert.equal(await secret.getAttribute('type'),'password');
+ assert.equal(await page.evaluate(value=>JSON.stringify({...localStorage,...sessionStorage}).includes(value),value),false);
+ const config=await(await page.request.get(host.url+'/api/providers/openclaw/remote')).json();assert.equal(config.url,'wss://gateway.example/');assert.equal(config.agent,'voice');assert.equal(config.token,undefined);
+ await page.locator('#start').click();await page.waitForFunction(()=>document.getElementById('status').textContent==='통화 중');
+ for(const selector of ['#provider','#openclaw-mode','#remote-url','#remote-secret','#remote-agent','#remote-apply','#remote-recheck','#remote-delete'])assert.equal(await page.locator(selector).isDisabled(),true);
+ await page.locator('#stop').click();await page.waitForFunction(()=>document.getElementById('status').textContent==='대기 중');
+ let reveals=0;page.on('request',request=>{if(request.url().endsWith('/remote/reveal'))reveals++;});
+ await page.reload();await page.waitForFunction(()=>!document.getElementById('start').disabled);
+ assert.equal(await page.locator('#openclaw-mode').inputValue(),'remote');assert.equal(await page.locator('#remote-url').inputValue(),'wss://gateway.example/');
+ assert.equal(await page.locator('#remote-auth-type').inputValue(),'password');assert.equal(reveals,0);
+ assert.equal(await secret.getAttribute('type'),'password');assert.match(await secret.getAttribute('placeholder'),/•/);
+ await eye.click();await page.waitForFunction(()=>document.getElementById('remote-secret').type==='text');
+ assert.equal(reveals,1);assert.equal(await secret.inputValue(),value);
+ await eye.click();assert.equal(await secret.getAttribute('type'),'password');assert.equal(await secret.inputValue(),value);
+ await page.locator('#remote-recheck').click();await page.waitForFunction(()=>!document.getElementById('start').disabled);
+ assert.equal(await secret.inputValue(),value);
+ await page.locator('#remote-apply').click();await page.waitForFunction(()=>!document.getElementById('start').disabled);
+ assert.equal(await secret.inputValue(),value);
+ await page.locator('#remote-url').fill('wss://another.example/');assert.equal(await page.locator('#start').isDisabled(),true);
+ assert.equal(await secret.inputValue(),'');assert.equal(await eye.isDisabled(),true);
+ await page.locator('#remote-recheck').click();await page.waitForFunction(()=>!document.getElementById('start').disabled);
+ assert.equal(await page.locator('#remote-url').inputValue(),'wss://gateway.example/');
+ await page.locator('#remote-delete').click();await page.locator('#remote-delete').waitFor({state:'hidden'});
+ assert.equal(await page.locator('#start').isDisabled(),true);
+ assert.equal(await secret.inputValue(),'');assert.equal(await eye.isDisabled(),true);
+ assert.equal((await(await page.request.get(host.url+'/api/providers/openclaw/remote')).json()).hasCredentials,false);
+ await page.locator('#openclaw-mode').selectOption('local');await page.waitForFunction(()=>!document.getElementById('start').disabled);assert.equal(await page.locator('#remote-settings').isHidden(),true);
 });
 test('a late readiness response from the previous AI cannot overwrite the new selection',{timeout:15000},async t=>{
  const page=await pageFor(t);let release;const pending=new Promise(r=>{release=r;});

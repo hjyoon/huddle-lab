@@ -5,11 +5,42 @@ import { createClaudeVoiceProvider } from "../../dist/claude-voice/index.js";
 import { createOpenClawVoiceProvider } from "../../dist/openclaw-voice/index.js";
 const element=id=>document.getElementById(id);
 const names={codex:"Codex",claude:"Claude",openclaw:"OpenClaw"};
-let huddle,off,ready=false,selected="codex",generation=0,checking;
+const vpnAccess=location.protocol==="https:";
+let huddle,off,ready=false,selected="codex",generation=0,checking,remoteMode="local",configuring=false;
+let savedRemote=false,remoteStorageError=false;
+let savedUrl,savedAuthType,usingSavedSecret=false,revealing;
+const secretInput=element("remote-secret");
+const authTypeInput=element("remote-auth-type");
+const remoteUrlInput=element("remote-url");
+function canReuseSecret(){
+ if(!usingSavedSecret||!savedRemote||authTypeInput.value!==savedAuthType)return false;
+ try{return new URL(remoteUrlInput.value.trim()).href===savedUrl;}catch{return false;}
+}
+function maskSecret(){
+ revealing?.abort();revealing=undefined;
+ secretInput.type="password";
+}
 const idle=()=>!huddle||["idle","error"].includes(huddle.snapshot().phase);
 const render=()=>{
  const state=huddle?.snapshot(),phase=state?.phase??"idle",connected=phase==="connected";
  element("provider").disabled=!["idle","error"].includes(phase);
+ element("openclaw-choice").hidden=selected!=="openclaw";
+ element("remote-settings").hidden=selected!=="openclaw"||remoteMode!=="remote";
+ element("openclaw-mode").disabled=configuring||!["idle","error"].includes(phase);
+ element("remote-fields").disabled=configuring||!["idle","error"].includes(phase);
+ element("remote-recheck").hidden=!savedRemote;
+ element("remote-delete").hidden=vpnAccess||!savedRemote&&!remoteStorageError;
+ element("remote-apply").hidden=vpnAccess;
+ element("remote-editor").hidden=vpnAccess;
+ element("remote-vpn-note").hidden=!vpnAccess;
+ const shown=secretInput.type==="text",reuseSecret=canReuseSecret();
+ const toggle=element("remote-secret-toggle"),toggleLabel=shown?"인증 정보 숨기기":"인증 정보 보기";
+ toggle.disabled=!!revealing||(!secretInput.value&&!reuseSecret&&!shown);
+ toggle.setAttribute("aria-label",toggleLabel);toggle.setAttribute("aria-pressed",String(shown));toggle.title=toggleLabel;
+ element("remote-secret-slash").toggleAttribute("hidden",!shown);
+ secretInput.placeholder=reuseSecret?"••••••••••••":"";
+ secretInput.required=!reuseSecret;
+ if(configuring)element("provider").disabled=true;
  element("start").disabled=!ready||!["idle","error"].includes(phase);
  element("start").textContent=`${names[selected]}와 통화 시작`;
  element("mute").disabled=!connected;element("interrupt").disabled=!connected||!["thinking","speaking"].includes(state.activity);
@@ -22,17 +53,34 @@ const render=()=>{
 };
 async function choose(id){
  if(!Object.hasOwn(names,id)||!idle()){element("provider").value=selected;return;}
+ maskSecret();
  const token=++generation;checking?.abort();checking=new AbortController();const signal=checking.signal;
  const previous=huddle;off?.();off=undefined;huddle=undefined;ready=false;selected=id;
  element("provider").value=id;
  try{localStorage.setItem("huddle-ai",id);}catch{}
  element("setup").textContent=`${names[id]} 설치 및 연결 상태 확인 중…`;element("workspace").textContent="확인 중";
  element("description").textContent=id==="codex"?"Codex와 실시간 음성으로 대화합니다. 통화 음성은 Codex의 실시간 서비스로 전송합니다.":id==="claude"?"Claude Code와 음성으로 대화합니다. 음성 인식·합성은 이 Mac에서 처리하고 인식한 대화 내용은 Claude 서비스로 전송합니다.":"OpenClaw에 설정된 모델과 음성으로 대화합니다. 음성 인식·합성은 이 Mac에서 처리하고 인식한 대화 내용은 설정된 모델 서비스로 전송합니다.";
+ if(id==="openclaw"&&remoteMode==="remote")element("description").textContent="원격 OpenClaw Gateway의 모델과 음성으로 대화합니다. 음성 인식·합성은 이 Mac에서 처리하고 인식한 대화 내용은 원격 Gateway로 전송합니다.";
  element("hint").textContent=id==="codex"?"AI가 말하는 중에도 다시 말할 수 있습니다. 응답 중단 버튼은 같은 대화의 음성 채널을 다시 연결합니다.":"말을 마친 뒤 잠시 쉬면 답변합니다. AI가 말할 때 다시 말하면 응답을 중단합니다. 한 번에 30초까지 말할 수 있습니다.";
  render();
  try{
   await previous?.dispose();if(token!==generation)return;
-  const result=await fetch(`/api/providers/${id}`,{signal});if(!result.ok)throw new Error("AI 상태를 확인할 수 없습니다.");
+  if(id==="openclaw"&&remoteMode==="remote"){
+   const response=await fetch("/api/providers/openclaw/remote",{signal});if(!response.ok)throw new Error("원격 설정을 확인할 수 없습니다.");
+   const config=await response.json();if(token!==generation)return;
+   const keepValue=usingSavedSecret&&config.url===savedUrl&&config.authType===savedAuthType;
+   if(config.url)remoteUrlInput.value=config.url;
+   element("remote-agent").value=config.agent??"";
+   savedRemote=!!config.hasCredentials;
+   savedUrl=config.url;savedAuthType=config.authType;
+   if(savedAuthType)authTypeInput.value=savedAuthType;
+   if(!keepValue)secretInput.value="";
+   usingSavedSecret=savedRemote;
+   remoteStorageError=!!config.storageError;
+   element("remote-config-status").textContent=config.storageError??(savedRemote?"저장된 인증으로 연결합니다.":"주소와 인증 정보를 입력하고 저장해 주세요.");
+   render();
+  }
+  const result=await fetch(`/api/providers/${id}${id==="openclaw"?`?mode=${remoteMode}`:""}`,{signal});if(!result.ok)throw new Error("AI 상태를 확인할 수 없습니다.");
   const status=await result.json();if(token!==generation)return;
   element("workspace").textContent=status.workspace??"확인할 수 없음";
   ready=!!status.ready&&!status.busy;
@@ -45,7 +93,83 @@ async function choose(id){
  if(token===generation)render();
 }
 element("provider").onchange=()=>{void choose(element("provider").value);};
-element("start").onclick=()=>{void huddle?.start();};element("mute").onclick=()=>huddle?.mute();element("interrupt").onclick=()=>{void huddle?.interrupt();};element("stop").onclick=()=>{void huddle?.leave();};
-window.addEventListener("pagehide",()=>{generation++;checking?.abort();off?.();void huddle?.dispose();});
+element("openclaw-mode").onchange=()=>{
+ if(!idle()||configuring){element("openclaw-mode").value=remoteMode;return;}
+ remoteMode=element("openclaw-mode").value;
+ try{localStorage.setItem("huddle-openclaw-mode",remoteMode);}catch{}
+ void choose(selected);
+};
+async function updateRemoteSettings(settings){
+ if(vpnAccess||!idle()||configuring)return;
+ maskSecret();
+ configuring=true;ready=false;const token=++generation;checking?.abort();checking=new AbortController();
+ const previous=huddle;off?.();off=undefined;huddle=undefined;
+ element("remote-config-status").textContent=settings?"설정 저장 중…":"인증 삭제 중…";render();
+ try{
+  await previous?.dispose();
+  const request={method:settings?"POST":"DELETE",signal:checking.signal};
+  if(settings){request.headers={"Content-Type":"application/json"};request.body=JSON.stringify(settings);}
+  const response=await fetch("/api/providers/openclaw/remote",request);
+  const result=await response.json();if(!response.ok)throw new Error(result.error??"원격 설정을 변경할 수 없습니다.");
+  if(token!==generation)return;
+  if(settings){
+   savedUrl=new URL(settings.url).href;savedAuthType=authTypeInput.value;usingSavedSecret=true;
+   try{localStorage.setItem("huddle-openclaw-url",settings.url);}catch{}
+  }else{secretInput.value="";usingSavedSecret=false;}
+  savedRemote=!!settings;remoteStorageError=false;
+  configuring=false;await choose("openclaw");
+ }catch(error){if(token===generation)element("remote-config-status").textContent=error.message;}
+ finally{configuring=false;render();}
+}
+element("remote-settings").onsubmit=event=>{
+ event.preventDefault();
+ const settings={url:remoteUrlInput.value.trim(),agent:element("remote-agent").value.trim()};
+ if(usingSavedSecret){
+  if(!canReuseSecret())return;
+  settings.reuseSaved=true;settings.authType=authTypeInput.value;
+ }else settings[authTypeInput.value]=secretInput.value;
+ void updateRemoteSettings(settings);
+};
+element("remote-recheck").onclick=()=>{
+ if(!idle()||configuring||!savedRemote)return;
+ void choose("openclaw");
+};
+element("remote-delete").onclick=()=>{void updateRemoteSettings();};
+element("remote-secret-toggle").onclick=async()=>{
+ if(!idle()||configuring||revealing)return;
+ if(secretInput.type==="text"){maskSecret();render();return;}
+ if(!canReuseSecret()){
+  if(secretInput.value)secretInput.type="text";
+  render();return;
+ }
+ const controller=new AbortController();revealing=controller;render();
+ try{
+  const response=await fetch("/api/providers/openclaw/remote/reveal",{
+   method:"POST",headers:{"Content-Type":"application/json"},body:"{}",signal:controller.signal,
+  });
+  const result=await response.json();
+  if(revealing!==controller)return;
+  if(!response.ok)throw new Error(result.error??"저장된 인증 정보를 확인할 수 없습니다.");
+  if(result.url!==savedUrl||result.authType!==savedAuthType||typeof result.secret!=="string")
+   throw new Error("저장된 인증이 변경됐습니다. 연결을 다시 확인해 주세요.");
+  secretInput.value=result.secret;secretInput.type="text";
+ }catch(error){if(!controller.signal.aborted)element("remote-config-status").textContent=error.message;}
+ finally{if(revealing===controller){revealing=undefined;render();}}
+};
+secretInput.addEventListener("focus",()=>{if(usingSavedSecret&&secretInput.value)secretInput.select();});
+for(const id of ["remote-url","remote-secret","remote-agent","remote-auth-type"])element(id).addEventListener("input",()=>{
+ if(!idle()||configuring)return;
+ if(id==="remote-secret")usingSavedSecret=false;
+ else{
+  maskSecret();
+  if(usingSavedSecret&&!canReuseSecret()){secretInput.value="";usingSavedSecret=false;}
+ }
+ revealing?.abort();revealing=undefined;
+ ready=false;generation++;checking?.abort();element("setup").textContent="변경한 원격 설정을 적용해 주세요.";render();
+});
+element("start").onclick=()=>{maskSecret();render();void huddle?.start();};element("mute").onclick=()=>huddle?.mute();element("interrupt").onclick=()=>{void huddle?.interrupt();};element("stop").onclick=()=>{void huddle?.leave();};
+window.addEventListener("pagehide",()=>{maskSecret();generation++;checking?.abort();off?.();void huddle?.dispose();});
 try{selected=Object.hasOwn(names,localStorage.getItem("huddle-ai"))?localStorage.getItem("huddle-ai"):"codex";}catch{}
+try{remoteMode=localStorage.getItem("huddle-openclaw-mode")==="remote"?"remote":"local";element("remote-url").value=localStorage.getItem("huddle-openclaw-url")??"";}catch{}
+element("openclaw-mode").value=remoteMode;
 void choose(selected);

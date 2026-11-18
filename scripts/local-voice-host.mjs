@@ -10,7 +10,7 @@ import { serveDemoFile } from "./serve-demo.mjs";
 export async function createLocalVoiceHost({id,name,port=0,cwd=process.cwd(),backend,entry,allowedOrigins=[]}={}) {
   if(!/^[a-z][a-z0-9-]*$/.test(id)||typeof name!=="string"||!backend)throw new Error("An identified voice backend is required.");
   if(!isAbsolute(cwd)||!(await stat(cwd)).isDirectory())throw new Error("Choose an existing absolute workspace.");
-  let url,active,checking;
+  let url,active,checking,closingHost=false,paused=false;
   const inspect=()=>checking??=(async()=>{try{return await backend.inspect();}finally{checking=undefined;}})();
   const server=createServer(async(req,res)=>{
     if(req.headers.host!==new URL(url).host||(req.headers.origin&&req.headers.origin!==url)){res.writeHead(403).end();return;}
@@ -24,7 +24,7 @@ export async function createLocalVoiceHost({id,name,port=0,cwd=process.cwd(),bac
   });
   const ws=new WebSocketServer({noServer:true,maxPayload:16384});
   server.on("upgrade",(req,socket,head)=>{
-    if(req.headers.host!==new URL(url).host||(req.headers.origin!==url&&!allowedOrigins.includes(req.headers.origin))||req.url!==`/${id}`||active){
+    if(closingHost||paused||req.headers.host!==new URL(url).host||(req.headers.origin!==url&&!allowedOrigins.includes(req.headers.origin))||req.url!==`/${id}`||active){
       socket.end(`HTTP/1.1 ${active?"409 Conflict":"403 Forbidden"}\r\nConnection: close\r\n\r\n`);return;
     }
     ws.handleUpgrade(req,socket,head,client=>ws.emit("connection",client));
@@ -80,7 +80,7 @@ export async function createLocalVoiceHost({id,name,port=0,cwd=process.cwd(),bac
           }
           if(!current(job))return;
           retain({role:"assistant",content:answer});emit({type:"response-ended"});emit({type:"activity",activity:"listening"});
-        }catch(error){if(!signal.aborted&&current(job))fail(error);}
+        }catch(error){if(error.fatal||!signal.aborted&&current(job))fail(error);}
         finally{if(session.job===job)session.job=undefined;}
       })();
     }
@@ -116,5 +116,13 @@ export async function createLocalVoiceHost({id,name,port=0,cwd=process.cwd(),bac
   });
   await new Promise((done,reject)=>{server.once("error",reject);server.listen(port,"127.0.0.1",done);});
   url=`http://127.0.0.1:${server.address().port}`;
-  return{url,inspect,async close(){await active?.close();for(const client of ws.clients)client.terminate();await new Promise(done=>ws.close(done));await new Promise(done=>{server.close(done);server.closeAllConnections();});}};
+  return{
+    url,inspect,get busy(){return!!active;},
+    pauseIfIdle(){
+      if(active||paused||closingHost)return undefined;
+      paused=true;
+      return()=>{paused=false;};
+    },
+    async close(){closingHost=true;await active?.close();for(const client of ws.clients)client.terminate();await new Promise(done=>ws.close(done));await new Promise(done=>{server.close(done);server.closeAllConnections();});},
+  };
 }
