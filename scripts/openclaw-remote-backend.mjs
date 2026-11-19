@@ -101,11 +101,12 @@ export function validateRemoteSettings(value) {
 
 /** The CLI handles Gateway pairing. Each voice call owns one Gateway session. */
 export function createRemoteOpenClawBackend({cwd=process.cwd(),runtimeRoot=resolve(cwd,".huddle-runtime/claude"),
-  binary="openclaw",remote,python,model="base",language="ko",voice,run=runOwned,mainDelegation=false}={}) {
-  const settings=remote?.url?validateRemoteSettings(mainDelegation?{...remote,agent:"main"}:remote):undefined;
+  binary="openclaw",remote,python,model="base",language="ko",voice,run=runOwned,mainDelegation=false,mainVoice=false}={}) {
+  const usesMainTools = mainDelegation || mainVoice;
+  const settings=remote?.url?validateRemoteSettings(usesMainTools?{...remote,agent:"main"}:remote):undefined;
   const speech=mainDelegation?undefined:createLocalSpeechBackend({cwd,runtimeRoot,...(python?{python}:{}),model,language,voice,run});
   // A cold Worker can require node provisioning and an image pull before inference.
-  const turnTimeoutMs = mainDelegation ? 120000 : 60000;
+  const turnTimeoutMs = usesMainTools ? 120000 : 60000;
   let selectedAgent,blocked;
   const env=settings?{...process.env,OPENCLAW_GATEWAY_URL:settings.url,OPENCLAW_GATEWAY_TOKEN:settings.token??"",OPENCLAW_GATEWAY_PASSWORD:settings.password??""}:undefined;
   const call=async(method,params={},signal,timeout=15000)=>{
@@ -219,7 +220,7 @@ export function createRemoteOpenClawBackend({cwd=process.cwd(),runtimeRoot=resol
           inventory.groups.some(group=>!Array.isArray(group?.tools))){
           throw new GatewayError("원격 Gateway의 세션 도구 구성을 확인하지 못했습니다.");
         }
-        if (!mainDelegation && inventory.groups.some(group =>
+        if (!usesMainTools && inventory.groups.some(group =>
           group.tools.some(tool => tool?.deniedBySession !== true && tool?.source !== "mcp"))) {
           throw new GatewayError("Gateway의 전용 Huddle 에이전트에서 MCP 도구만 허용한 뒤 다시 연결해 주세요.");
         }
@@ -245,7 +246,7 @@ export function createRemoteOpenClawBackend({cwd=process.cwd(),runtimeRoot=resol
           try {
             // Wait for the acknowledgement so an interrupt can target its exact run.
             const start = await call("agent", {
-              agentId, sessionKey, message: latest.content, extraSystemPrompt: gatewaySpokenReplyInstructions(mainDelegation),
+              agentId, sessionKey, message: latest.content, extraSystemPrompt: gatewaySpokenReplyInstructions(usesMainTools),
               deliver: false, idempotencyKey: runId,
             });
             if (start.runId !== runId || start.status !== "accepted") {
