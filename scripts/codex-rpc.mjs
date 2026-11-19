@@ -5,7 +5,7 @@ import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { join, isAbsolute } from "node:path";
 
-export async function openCodexRpc({ cwd, runtimeRoot, binary = "codex", signal, spawnProcess = spawn }) {
+export async function openCodexRpc({ cwd, runtimeRoot, binary = "codex", signal, handleToolCall, spawnProcess = spawn }) {
   if (!isAbsolute(cwd) || !isAbsolute(runtimeRoot)) throw new Error("Codex workspace and runtime paths must be absolute.");
   signal?.throwIfAborted();
   await mkdir(runtimeRoot, { recursive: true, mode: 0o700 });
@@ -46,8 +46,14 @@ export async function openCodexRpc({ cwd, runtimeRoot, binary = "codex", signal,
         if (!line.trim()) continue;
         const value = JSON.parse(line);
         if (value.id !== undefined && value.method) {
-          // This read-only voice host does not grant interactive approvals/tools.
-          void send({ id: value.id, error: { code: -32601, message: "Interactive requests are unsupported by this voice host." } }).catch(fail);
+          if (value.method === "item/tool/call" && handleToolCall) {
+            void Promise.resolve().then(() => handleToolCall(value.params)).then(
+              result => send({ id: value.id, result }),
+              () => send({ id: value.id, error: { code: -32603, message: "Voice delegation failed." } }),
+            ).catch(fail);
+          } else {
+            void send({ id: value.id, error: { code: -32601, message: "Interactive requests are unsupported by this voice host." } }).catch(fail);
+          }
         } else if (value.id !== undefined) {
           const item = pending.get(value.id);
           if (!item) continue;

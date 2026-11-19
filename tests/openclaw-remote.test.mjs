@@ -7,10 +7,10 @@ const remote={url:"wss://gateway.example/",token:"private-gateway-token"};
 const voiceAgent="huddle-voice";
 const utterance=[{role:"user",content:"안녕하세요."}];
 const deferred=()=>{let resolve,reject;const promise=new Promise((r,j)=>{resolve=r;reject=j;});return{promise,resolve,reject};};
-function fixture(override=()=>{}, {probe,agent}={}){
+function fixture(override=()=>{}, {probe,agent,mainDelegation}={}){
   const calls=[];let runId;
   const sessions=new Map();
-  const backend=createRemoteOpenClawBackend({remote:{...remote,agent},run:async(binary,args,options)=>{
+  const backend=createRemoteOpenClawBackend({remote:{...remote,agent},mainDelegation,run:async(binary,args,options)=>{
     const method=args[0]==="gateway"?args[2]:binary;
     const params=method===binary?{}:JSON.parse(args[args.indexOf("--params")+1]);
     calls.push({method,params,args,options});
@@ -120,6 +120,24 @@ test("callable non-MCP tools block a voice turn even when MCP tools are configur
   assert.equal(calls.some(call=>call.method==="agent"),false);
   assert.deepEqual(calls.find(call=>call.method==="sessions.reclaim").params,
     {key:calls.find(call=>call.method==="sessions.create").params.key});
+});
+test("Codex delegation targets main, uses Gateway tools and reclaims the exact call session",async()=>{
+  const {backend,calls}=fixture(({method})=>method==="tools.effective"
+    ? {agentId:"main",groups:[{tools:[{id:"exec",source:"core"}]}]}:undefined, {agent:voiceAgent,mainDelegation:true});
+  const session=await backend.openSession();
+  await session.reply(utterance);
+  const created=calls.find(call=>call.method==="sessions.create").params;
+  assert.equal(created.agentId,"main");
+  assert.match(created.key,/^agent:main:huddle:[0-9a-f-]+$/);
+  const execution=calls.find(call=>call.method==="agent").params;
+  assert.equal(execution.agentId,"main");
+  assert.equal(execution.sessionKey,created.key);
+  assert.equal(execution.deliver,false);
+  assert.match(execution.extraSystemPrompt,/Use the tools available/);
+  assert.equal(calls.findLast(call=>call.method==="agent.wait").params.timeoutMs,120000);
+  assert.equal(calls.some(call=>call.method==="say"),false);
+  await session.close();
+  assert.deepEqual(calls.find(call=>call.method==="sessions.reclaim").params,{key:created.key});
 });
 test("voice sessions accept both discovered and as-yet undiscovered MCP tools and read the terminal result",async()=>{
   for (const inventory of [

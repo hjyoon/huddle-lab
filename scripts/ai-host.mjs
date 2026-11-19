@@ -4,15 +4,21 @@ import { createOpenClawHost } from "./openclaw-host.mjs";
 import { createClaudeHost } from "./claude-host.mjs";
 import { createHermesHost } from "./hermes-host.mjs";
 import { serveDemoFile } from "./serve-demo.mjs";
-import { validateRemoteSettings } from "./openclaw-remote-backend.mjs";
+import { createRemoteOpenClawBackend, validateRemoteSettings } from "./openclaw-remote-backend.mjs";
 import { createWireGuardHttps } from "./wireguard-https.mjs";
 
 /** Provider hosts accept only the selector's origin. */
 export async function createAiHost({port=4184,cwd=process.cwd(),codex={},claude={},openclaw={},openclawRemote={},hermes={},remoteStore,wireguard}={}) {
   let url,remoteHost,remoteSettings,storageError,configuring=false,mutation,closing,vpnHost;
   const providers=new Map();
+  const {openclawMain,...codexOptions}=codex;
   const remoteOptions={...openclaw,...openclawRemote,backend:openclawRemote.backend,mode:"remote"};
   const startRemote=remote=>createOpenClawHost({...remoteOptions,remote,cwd,port:0,allowedOrigins:[url]});
+  const remoteBusy=()=>remoteHost?.busy||(openclawMain&&providers.get("codex")?.host.busy);
+  const createGatewayBackend=openclawMain?()=>{
+    if(configuring||!remoteSettings)throw new Error("OpenClaw의 Gateway 연결을 먼저 설정해 주세요.");
+    return createRemoteOpenClawBackend({...remoteOptions,cwd,remote:remoteSettings,mainDelegation:true});
+  }:undefined;
   try{
     remoteSettings=await remoteStore?.load()??(remoteOptions.remote?.url?validateRemoteSettings(remoteOptions.remote):undefined);
   }catch{
@@ -50,7 +56,7 @@ export async function createAiHost({port=4184,cwd=process.cwd(),codex={},claude=
       if(req.headers.origin!==url||req.headers["content-type"]!=="application/json"){
         json(403,{error:"Same-origin settings request required."});return;
       }
-      if(configuring||remoteHost?.busy){json(409,{error:"통화나 설정 변경을 마친 뒤 인증 정보를 확인해 주세요."});return;}
+      if(configuring||remoteBusy()){json(409,{error:"통화나 설정 변경을 마친 뒤 인증 정보를 확인해 주세요."});return;}
       if(!remoteSettings){json(404,{error:"저장된 인증 정보가 없습니다."});return;}
       const authType=remoteSettings.token?"token":"password";
       json(200,{url:remoteSettings.url,authType,secret:remoteSettings[authType]});return;
@@ -62,7 +68,7 @@ export async function createAiHost({port=4184,cwd=process.cwd(),codex={},claude=
       if(vpn){json(403,{error:"저장된 인증은 Huddle 호스트의 로컬 화면에서 변경할 수 있습니다."});return;}
       if(!["POST","DELETE"].includes(req.method)){json(405,{error:"Method not allowed."});return;}
       if(req.headers.origin!==url||(req.method==="POST"&&req.headers["content-type"]!=="application/json")){json(403,{error:"Same-origin settings request required."});return;}
-      if(configuring||remoteHost?.busy){json(409,{error:"통화 종료 후 원격 설정을 변경해 주세요."});return;}
+      if(configuring||remoteBusy()){json(409,{error:"통화 종료 후 원격 설정을 변경해 주세요."});return;}
       configuring=true;
       try{
         let settings;
@@ -110,6 +116,9 @@ export async function createAiHost({port=4184,cwd=process.cwd(),codex={},claude=
       if(id==="openclaw"&&!["local","remote"].includes(mode)){json(400,{error:"Unknown OpenClaw mode."});return;}
       const remote=id==="openclaw"&&mode==="remote";
       if(remote&&configuring){json(503,{ready:false,error:"원격 설정 적용 중입니다."});return;}
+      if(id==="codex"&&openclawMain&&(configuring||!remoteSettings)){
+        json(200,{id,name:"Codex",ready:false,error:storageError??"OpenClaw의 Gateway 연결을 먼저 설정해 주세요."});return;
+      }
       if(remote&&!remoteSettings){
         json(200,{id,name:"OpenClaw",mode,ready:false,busy:false,error:storageError??"화면에서 원격 Gateway 주소와 인증 정보를 입력해 주세요."});return;
       }
@@ -146,7 +155,10 @@ export async function createAiHost({port=4184,cwd=process.cwd(),codex={},claude=
     await closed;
   })();
   try{
-    providers.set("codex",{name:"Codex",host:await createCodexHost({...codex,cwd,port:0,allowedOrigins:[url]})});
+    providers.set("codex",{name:"Codex",host:await createCodexHost({
+      ...codexOptions,cwd,port:0,allowedOrigins:[url],createGatewayBackend,
+      ...(openclawMain?{requireChatGpt:true,voiceModel:codexOptions.voiceModel??"gpt-live-1.1-codex"}:{}),
+    })});
     providers.set("claude",{name:"Claude",host:await createClaudeHost({...claude,cwd,port:0,allowedOrigins:[url]})});
     providers.set("openclaw",{name:"OpenClaw",host:await createOpenClawHost({...openclaw,cwd,port:0,allowedOrigins:[url]})});
     providers.set("hermes",{name:"Hermes",host:await createHermesHost({...hermes,cwd,port:0,allowedOrigins:[url]})});
