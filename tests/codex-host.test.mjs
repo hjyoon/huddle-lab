@@ -3,14 +3,16 @@ import { test } from "node:test";
 import { WebSocket } from "ws";
 import { createCodexHost } from "../scripts/codex-host.mjs";
 
-function fixture() {
-  const calls = [], subscribers = new Set(); let closed = 0;
+function fixture(accountType = "chatgpt") {
+  const calls = [], subscribers = new Set(); let closed = 0, callTool;
   return { calls, get closed() { return closed; }, emit(message) { for (const fn of subscribers) fn(message); },
-    async createRpc() { return {
+    async requestTool(params) { return callTool(params); },
+    async createRpc({ handleToolCall } = {}) { callTool = handleToolCall; return {
       subscribe(fn) { subscribers.add(fn); return () => subscribers.delete(fn); },
       async request(method, params) {
         calls.push({ method, params });
-        if (method === "account/read") return { account: { type: "chatgpt" } };
+        if (method === "account/read") return { account: { type: accountType } };
+        if (method === "model/list") return { data: [{ model:"other" },{ model:"account-model",isDefault:true }] };
         if (method === "thread/start") return { thread: { id: "owned" } };
         return {};
       }, async close() { closed++; subscribers.clear(); },
@@ -65,6 +67,58 @@ test("Codex host rejects foreign origins and simultaneous clients", async (t) =>
   await reject("https://foreign.example",403);
   const c = await client(host); t.after(()=>c.ws.terminate());
   await reject(host.url,409);
+});
+
+test("a ChatGPT audio call delegates from one owned turn to one Gateway session", {timeout:5000}, async (t) => {
+  const f = fixture(), tasks = [];
+  let opened = 0, closed = 0, started;
+  const workStarted = new Promise(resolve => { started = resolve; });
+  const host = await createCodexHost({
+    port: 0, createRpc: f.createRpc,
+    voiceModel: "gpt-live-1.1-codex", requireChatGpt: true,
+    createGatewayBackend: () => ({ async openSession() {
+      opened++;
+      return {
+        async reply(history, signal) {
+          tasks.push(history[0].content);
+          if (tasks.length === 1) return "Gateway result.";
+          started();
+          await new Promise((_, reject) => signal.addEventListener("abort", () => reject(signal.reason), { once: true }));
+        },
+        async close() { closed++; },
+      };
+    } }),
+  });
+  t.after(() => host.close());
+  const c = await client(host); t.after(() => c.ws.terminate());
+  assert.ok((await c.request("voice/open")).result);
+  assert.ok((await c.request("thread/realtime/start", { threadId:"owned",transport:{type:"webrtc",sdp:"offer"},model:"from-browser" })).result);
+  const thread = f.calls.find(call=>call.method==="thread/start").params;
+  assert.equal(thread.model,"account-model");
+  assert.equal(thread.dynamicTools[0].name,"run_openclaw_main");
+  assert.equal(f.calls.find(call=>call.method==="thread/realtime/start").params.model,"gpt-live-1.1-codex");
+  f.emit({ method:"turn/started",params:{threadId:"owned",turn:{id:"turn"}} });
+  const tool = {threadId:"owned",turnId:"turn",tool:"run_openclaw_main",arguments:{task:"Run the requested check."}};
+  assert.equal((await f.requestTool({...tool,threadId:"other"})).success,false);
+  assert.equal(opened,0);
+  assert.deepEqual(await f.requestTool(tool),{success:true,contentItems:[{type:"inputText",text:"Gateway result."}]});
+  const second = f.requestTool(tool);
+  await workStarted;
+  assert.ok((await c.request("voice/interrupt",{threadId:"owned"})).result);
+  assert.equal((await second).success,false);
+  assert.ok((await c.request("voice/close")).result);
+  assert.equal(opened,1);
+  assert.equal(closed,1);
+});
+
+test("subscription voice rejects an API-key login before creating a Codex thread", async (t) => {
+  const f = fixture("apiKey");
+  const host = await createCodexHost({ port:0, createRpc:f.createRpc, requireChatGpt:true });
+  t.after(() => host.close());
+  assert.equal((await host.inspect()).ready,false);
+  const c = await client(host); t.after(() => c.ws.terminate());
+  assert.match((await c.request("voice/open")).error.message,/ChatGPT 로그인/);
+  assert.equal(f.calls.some(call=>call.method==="thread/start"),false);
 });
 
 test("a disconnected browser keeps its seat until a pending realtime start settles", async(t)=>{

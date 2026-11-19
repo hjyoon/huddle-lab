@@ -9,6 +9,15 @@ import { createOpenClawRemoteStore } from "../scripts/openclaw-remote-store.mjs"
 import { providerFixtures } from "./fixtures/ai-backends.mjs";
 async function socket(url,origin){const ws=new WebSocket(url,{origin});await new Promise((r,j)=>{ws.once('open',r);ws.once('error',j);});return ws;}
 const message=(ws)=>new Promise(r=>ws.once('message',raw=>r(JSON.parse(raw))));
+test('the opted-in host shows main as the effective agent for a saved legacy Gateway connection',async t=>{
+ const f=providerFixtures();
+ const host=await createAiHost({port:0,...f,codex:{...f.codex,openclawMain:true},
+  openclawRemote:{backend:f.openclaw.backend,remote:{url:'wss://remote.example/',token:'fixture-token',agent:'huddle-voice'}}});
+ t.after(()=>host.close());
+ const response=await(await fetch(host.url+'/api/providers/openclaw/remote')).json();
+ assert.equal(response.agent,'main');
+ assert.equal(response.configured,true);
+});
 test('AI selector exposes all providers and trusts only its own origin on child hosts',async t=>{
  const f=providerFixtures(),host=await createAiHost({port:0,...f});t.after(()=>host.close());
  assert.deepEqual(await(await fetch(host.url+'/api/providers')).json(),[{id:'codex',name:'Codex'},{id:'claude',name:'Claude'},{id:'openclaw',name:'OpenClaw'},{id:'hermes',name:'Hermes'}]);

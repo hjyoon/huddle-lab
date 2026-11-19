@@ -4,9 +4,10 @@ import { networkInterfaces } from "node:os";
 import { fileURLToPath } from "node:url";
 import { createAiHost } from "./ai-host.mjs";
 import { createOpenClawRemoteStore } from "./openclaw-remote-store.mjs";
-const runtime=fileURLToPath(new URL("../.huddle-runtime",import.meta.url));
+const runtime=resolve(process.env.HUDDLE_RUNTIME_DIR??fileURLToPath(new URL("../.huddle-runtime",import.meta.url)));
 const vpnDirectory=resolve(runtime,"wireguard");
 const speech={
+ runtimeRoot:resolve(runtime,"claude"),
  python:process.env.HUDDLE_CLAUDE_PYTHON||undefined,
  model:process.env.HUDDLE_CLAUDE_ASR_MODEL??"base",
  language:process.env.HUDDLE_CLAUDE_LANGUAGE??"ko",
@@ -27,7 +28,10 @@ async function readWireGuardOptions(){
 }
 const host=await createAiHost({port:Number(process.env.PORT??4184),cwd:resolve(process.env.HUDDLE_WORKSPACE??process.cwd()),
  remoteStore:createOpenClawRemoteStore(runtime),wireguard:await readWireGuardOptions(),
- codex:{binary:process.env.HUDDLE_CODEX_BINARY??"codex",model:process.env.HUDDLE_CODEX_MODEL||undefined},
+ codex:{binary:process.env.HUDDLE_CODEX_BINARY??"codex",model:process.env.HUDDLE_CODEX_MODEL||undefined,
+  runtimeRoot:resolve(runtime,"codex"),
+  openclawMain:process.env.HUDDLE_CODEX_OPENCLAW_MAIN==="1",voiceModel:process.env.HUDDLE_CODEX_VOICE_MODEL||undefined,
+  requireChatGpt:!!process.env.HUDDLE_CODEX_VOICE_MODEL},
  claude:{...speech,binary:process.env.HUDDLE_CLAUDE_BINARY??"claude"},
  openclaw:{...speech,binary:process.env.HUDDLE_OPENCLAW_BINARY??"openclaw",agent:process.env.HUDDLE_OPENCLAW_AGENT,modelRef:process.env.HUDDLE_OPENCLAW_MODEL},
  hermes:{...speech,settings:{url:process.env.HUDDLE_HERMES_URL,apiKey:process.env.HUDDLE_HERMES_KEY}},

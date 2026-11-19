@@ -16,7 +16,9 @@ async function main() {
   const prompt = await readFile(join(directory, "prompt.wav"));
   const interruption = await readFile(join(directory, "interrupt.wav"));
   await mkdir(directory, { recursive: true });
-  const host = await createCodexHost({ port: 0 });
+  const voiceModel = process.env.HUDDLE_CODEX_VOICE_MODEL || undefined;
+  const host = await createCodexHost({ port: 0, voiceModel, requireChatGpt: Boolean(voiceModel),
+    runtimeRoot: join(directory, "codex-rpc") });
   let browser;
   const summaries = [];
   const meterCode = `
@@ -183,6 +185,7 @@ async function main() {
       } finally { await page.close(); }
     }
     await writeFile(join(directory, mode === "control" ? "control-summary.json" : "summary.json"),JSON.stringify({ timestamp:new Date().toISOString(),version:status.version,
+      ...(status.voiceModel ? { voiceModel: status.voiceModel } : {}),
       mode,environment:"live Codex WebRTC, synthetic microphone, no manual interruption",summaries },null,2)+"\n");
     console.log(`Evidence: ${directory}/${mode === "control" ? "control-summary.json" : "summary.json"}`);
     if (mode === "barge-in" && summaries.some(row=>!row.automaticBargeInObserved)) process.exitCode=1;

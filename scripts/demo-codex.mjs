@@ -4,6 +4,8 @@ const host = await createCodexHost({
   cwd: resolve(process.env.HUDDLE_WORKSPACE ?? process.cwd()),
   binary: process.env.HUDDLE_CODEX_BINARY ?? "codex",
   model: process.env.HUDDLE_CODEX_MODEL || undefined,
+  voiceModel: process.env.HUDDLE_CODEX_VOICE_MODEL || undefined,
+  requireChatGpt: Boolean(process.env.HUDDLE_CODEX_VOICE_MODEL),
   port: Number(process.env.PORT ?? 4182),
 });
 console.log(`Codex AI Huddle: ${host.url}/`);

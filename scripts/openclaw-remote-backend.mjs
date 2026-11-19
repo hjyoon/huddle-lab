@@ -14,13 +14,16 @@ class GatewayError extends Error {
 }
 
 const DEFAULT_VOICE_AGENT = "huddle-voice";
-const gatewaySpokenReplyInstructions = [
-  immediateReplyInstructions,
-  "Use the MCP tools available to this Gateway session when you need live information or the user asks you to perform an authorized action.",
-  "If the relevant MCP tool is deferred, use the Gateway's tool search and dispatch capabilities to find and call it.",
-  "Wait for the tool result before giving the final spoken answer. Say what you verified or did, or explain what was unavailable, denied, or failed.",
-  "Finish within this turn. Do not start work in the background or promise a separate follow-up message.",
-].join(" ");
+function gatewaySpokenReplyInstructions(mainDelegation) {
+  const tool = mainDelegation ? "tool" : "MCP tool";
+  return [
+    immediateReplyInstructions,
+    `Use the ${tool}s available to this Gateway session when you need live information or the user asks you to perform an authorized action.`,
+    `If the relevant ${tool} is deferred, use the Gateway's tool search and dispatch capabilities to find and call it.`,
+    "Wait for the tool result before giving the final spoken answer. Say what you verified or did, or explain what was unavailable, denied, or failed.",
+    "Finish within this turn. Do not start work in the background or promise a separate follow-up message.",
+  ].join(" ");
+}
 
 function runFailure(result) {
   const detail = typeof result.error === "string" ? result.error : result.error?.message ?? "";
@@ -98,9 +101,12 @@ export function validateRemoteSettings(value) {
 
 /** The CLI handles Gateway pairing. Each voice call owns one Gateway session. */
 export function createRemoteOpenClawBackend({cwd=process.cwd(),runtimeRoot=resolve(cwd,".huddle-runtime/claude"),
-  binary="openclaw",remote,python,model="base",language="ko",voice,run=runOwned}={}) {
-  const settings=remote?.url?validateRemoteSettings(remote):undefined;
-  const speech=createLocalSpeechBackend({cwd,runtimeRoot,...(python?{python}:{}),model,language,voice,run});
+  binary="openclaw",remote,python,model="base",language="ko",voice,run=runOwned,mainDelegation=false,mainVoice=false}={}) {
+  const usesMainTools = mainDelegation || mainVoice;
+  const settings=remote?.url?validateRemoteSettings(usesMainTools?{...remote,agent:"main"}:remote):undefined;
+  const speech=mainDelegation?undefined:createLocalSpeechBackend({cwd,runtimeRoot,...(python?{python}:{}),model,language,voice,run});
+  // A cold Worker can require node provisioning and an image pull before inference.
+  const turnTimeoutMs = usesMainTools ? 120000 : 60000;
   let selectedAgent,blocked;
   const env=settings?{...process.env,OPENCLAW_GATEWAY_URL:settings.url,OPENCLAW_GATEWAY_TOKEN:settings.token??"",OPENCLAW_GATEWAY_PASSWORD:settings.password??""}:undefined;
   const call=async(method,params={},signal,timeout=15000)=>{
@@ -156,8 +162,11 @@ export function createRemoteOpenClawBackend({cwd=process.cwd(),runtimeRoot=resol
           throw new GatewayError("Gateway에 연결했습니다. 설정한 전용 Huddle 에이전트가 원격 Gateway에 없습니다.");
         await inspectRunAccess();
         result.agentId=agent;result.version="OpenClaw 원격 Gateway";
-        checkingSpeech=true;
-        Object.assign(result,await speech.inspectSpeech());selectedAgent=agent;result.ready=true;
+        if(speech){
+          checkingSpeech=true;
+          Object.assign(result,await speech.inspectSpeech());
+        }
+        selectedAgent=agent;result.ready=true;
       }catch(error){
         selectedAgent=undefined;
         result.ready=false;result.error=blocked??(error instanceof GatewayError||checkingSpeech?error.message:"원격 Gateway 연결 상태를 확인하지 못했습니다.");
@@ -207,9 +216,12 @@ export function createRemoteOpenClawBackend({cwd=process.cwd(),runtimeRoot=resol
       try {
         const inventory = await call("tools.effective", { sessionKey });
         // A new session may discover its MCP catalog only when the first run starts.
-        if (inventory.agentId !== agentId || !Array.isArray(inventory.groups) ||
-            inventory.groups.some(group => !Array.isArray(group?.tools) ||
-              group.tools.some(tool => tool?.deniedBySession !== true && tool?.source !== "mcp"))) {
+        if(inventory.agentId!==agentId||!Array.isArray(inventory.groups)||
+          inventory.groups.some(group=>!Array.isArray(group?.tools))){
+          throw new GatewayError("원격 Gateway의 세션 도구 구성을 확인하지 못했습니다.");
+        }
+        if (!usesMainTools && inventory.groups.some(group =>
+          group.tools.some(tool => tool?.deniedBySession !== true && tool?.source !== "mcp"))) {
           throw new GatewayError("Gateway의 전용 Huddle 에이전트에서 MCP 도구만 허용한 뒤 다시 연결해 주세요.");
         }
       } catch (error) {
@@ -229,12 +241,12 @@ export function createRemoteOpenClawBackend({cwd=process.cwd(),runtimeRoot=resol
           let accepted = false;
           let finished = false;
           const timeout = new AbortController();
-          const timer = setTimeout(() => timeout.abort(new GatewayError("원격 모델의 응답 대기 시간이 초과됐습니다.")), 60000);
+          const timer = setTimeout(() => timeout.abort(new GatewayError("원격 모델의 응답 대기 시간이 초과됐습니다.")), turnTimeoutMs);
           const workSignal = signal ? AbortSignal.any([signal, timeout.signal]) : timeout.signal;
           try {
             // Wait for the acknowledgement so an interrupt can target its exact run.
             const start = await call("agent", {
-              agentId, sessionKey, message: latest.content, extraSystemPrompt: gatewaySpokenReplyInstructions,
+              agentId, sessionKey, message: latest.content, extraSystemPrompt: gatewaySpokenReplyInstructions(usesMainTools),
               deliver: false, idempotencyKey: runId,
             });
             if (start.runId !== runId || start.status !== "accepted") {
@@ -242,7 +254,7 @@ export function createRemoteOpenClawBackend({cwd=process.cwd(),runtimeRoot=resol
             }
             accepted = true;
             workSignal.throwIfAborted();
-            const result = await call("agent.wait", { runId, timeoutMs: 60000 }, workSignal, 65000);
+            const result = await call("agent.wait", { runId, timeoutMs: turnTimeoutMs }, workSignal, turnTimeoutMs + 5000);
             workSignal.throwIfAborted();
             if (!["ok", "error"].includes(result.status) || result.pendingError === true) {
               throw new GatewayError("Gateway에서 원격 모델의 완료 결과를 받지 못했습니다.");

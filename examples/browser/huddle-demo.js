@@ -88,7 +88,10 @@ async function choose(id){
   element("workspace").textContent=status.workspace??"확인할 수 없음";
   ready=!!status.ready&&!status.busy;
   canLogin=!!status.needsLogin&&!!status.canLogin;
-  element("setup").textContent=ready?`${status.version} · ${id!=="codex"?`로컬 음성 엔진 준비됨${status.modelName?` · ${status.modelName}`:""}`:"연결 준비됨"}`:(status.needsLogin?`${status.error} ${canLogin?"아래 버튼으로 브라우저에서 로그인하거나 ":"Huddle 호스트의 "}터미널에서 claude auth login을 실행해 주세요.`:status.error??(status.busy?"이미 통화 중입니다. 종료 후 다시 선택해 주세요.":"선택한 AI의 설치·로그인 상태를 확인해 주세요."));
+  const connection=id==="codex"
+    ? [status.voiceModel??"연결 준비됨",status.delegateAgent? `OpenClaw ${status.delegateAgent}`:undefined].filter(Boolean).join(" · ")
+    : `로컬 음성 엔진 준비됨${status.modelName?` · ${status.modelName}`:""}`;
+  element("setup").textContent=ready?`${status.version} · ${connection}`:(status.needsLogin?`${status.error} ${canLogin?"아래 버튼으로 브라우저에서 로그인하거나 ":"Huddle 호스트의 "}터미널에서 claude auth login을 실행해 주세요.`:status.error??(status.busy?"이미 통화 중입니다. 종료 후 다시 선택해 주세요.":"선택한 AI의 설치·로그인 상태를 확인해 주세요."));
   if(ready){
    const provider=id==="codex"?createCodexVoiceProvider({connect:createCodexLocalConnector(status.wsUrl)}):id==="claude"?createClaudeVoiceProvider({url:status.wsUrl}):id==="hermes"?createHermesVoiceProvider({url:status.wsUrl}):createOpenClawVoiceProvider({url:status.wsUrl});
    huddle=createAgentHuddle({provider,openAudio:openWebAudio});off=huddle.subscribe(render);

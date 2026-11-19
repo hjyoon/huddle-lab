@@ -22,12 +22,33 @@ npm run demo:codex
 - `HUDDLE_WORKSPACE=/absolute/project npm run demo:codex`: 대화에서 참고할 작업 폴더.
 - `HUDDLE_CODEX_BINARY=/absolute/bin/codex npm run demo:codex`: CLI 경로 선택.
 - `HUDDLE_CODEX_MODEL=gpt-5.6-sol npm run demo`: 이 Huddle에서 위임 작업을 처리할 Codex 모델 지정.
+- `HUDDLE_CODEX_VOICE_MODEL=gpt-live-1.1-codex npm run demo:codex`: ChatGPT 로그인으로 사용할 실시간 음성 모델 지정.
 - `npm run demo:agent`: 외부 모델을 사용하지 않는 기존 연결 구조 테스트.
 
 Codex는 기존 설정·로그인·상태 경로를 사용합니다. 프로젝트의 `.huddle-runtime/`는
 임시 app-server 로그를 보관하고 정상 종료 시 정리합니다. 강제 종료 후 남은 파일은 수동 삭제할 수 있습니다.
 SQLite 경로를 임의로 바꾸면 기존 세션의 backfill 때문에 초기화가 지연될 수 있으므로 바꾸지 않습니다.
 여러 CLI가 설치된 경우 서버 실행 환경의 PATH가 선택하는 바이너리를 사용하고 화면에 버전을 표시합니다.
+
+## OpenClaw 업무 위임
+
+통합 화면에서 **OpenClaw → Gateway (MCP)** 연결을 저장한 다음
+`HUDDLE_CODEX_OPENCLAW_MAIN=1 npm run demo`로 실행하고 **Codex**를 선택합니다.
+Codex 음성은 호스트의 ChatGPT 로그인으로 연결합니다. 기본 음성 모델은
+`gpt-live-1.1-codex`이며, 준비 상태에 음성 모델과 위임 대상 `main`이 표시됩니다.
+업무 요청을 전달할 Codex 텍스트 모델은 현재 로그인 계정의 기본 모델을 사용합니다.
+`HUDDLE_CODEX_MODEL`이 지정되어 있으면 해당 모델을 선택합니다.
+이 모드에서는 기존 **OpenClaw → Gateway (MCP)** 연결도 에이전트가 비어 있거나
+`huddle-voice`로 저장된 경우 `main`을 사용합니다. 기존 로컬 음성 인식·합성으로
+통화할 때도 Gateway가 `main`의 도구 권한과 승인을 처리합니다.
+별도 체크아웃에서 데모를 실행할 때는 `HUDDLE_RUNTIME_DIR`로 기존
+`.huddle-runtime`의 실제 경로를 지정해 저장된 Gateway 연결을 사용할 수 있습니다.
+
+도구가 필요한 업무 요청은 첫 위임 시 생성한 해당 통화의 `main` 세션에서 실행합니다.
+Gateway가 도구 접근과 승인을 처리하고, Codex는 완료 답변을 같은 통화에서 읽습니다.
+새 Worker 기동을 포함해 업무 응답을 최대 120초 동안 기다립니다.
+명시적인 중단은 해당 통화의 실행을 취소하고, 통화 종료는 Gateway에 Worker 회수를 요청합니다.
+브라우저는 음성 모델이나 위임 대상을 지정할 수 없습니다.
 
 ## 재사용
 
