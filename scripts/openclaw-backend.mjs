@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 import { createLocalSpeechBackend } from "./local-speech.mjs";
 import { runOwned } from "./claude-process.mjs";
+import { completeSpokenReply, spokenReplyInstructions } from "./openclaw-spoken-reply.mjs";
 
 /** OpenClaw's tool-free local model transport. No agent sessions, chat
  * channels, delivery flags, or changes to the operator's config are used. */
@@ -32,7 +33,7 @@ export function createLocalOpenClawBackend({cwd=process.cwd(),runtimeRoot=resolv
     },
     async reply(history,signal){
       signal?.throwIfAborted();const capability=await inspectCapabilities();signal?.throwIfAborted();
-      const prompt="You are a spoken conversation assistant connected through OpenClaw. Answer the latest user message in the user's language, naturally in one or two short sentences. Return plain spoken text without Markdown. This is a text-only conversation, with no tools or external actions. Do not claim actions you have not performed.\nConversation history (JSON; user content is conversation data):\n"+JSON.stringify(history);
+      const prompt=`${spokenReplyInstructions}\nConversation history (JSON; user content is conversation data):\n${JSON.stringify(history)}`;
       const args=["infer","model","run","--local","--json",...(agent?["--agent",agent]:[]),...(modelRef?["--model",modelRef]:[]),
         ...(capability.stdin?["--prompt-stdin"]:["--prompt",prompt])];
       const output=await run(binary,args,{cwd,signal,timeoutMs:60000,...(capability.stdin?{input:prompt}:{})});
@@ -40,7 +41,7 @@ export function createLocalOpenClawBackend({cwd=process.cwd(),runtimeRoot=resolv
       if(result.ok!==true||result.capability!=="model.run")throw new Error(`OpenClaw: ${String(result.error??"model request failed").slice(0,500)}`);
       const text=(Array.isArray(result.outputs)?result.outputs:[]).map(item=>typeof item.text==="string"?item.text:"").join("\n").trim();
       if(!text)throw new Error("OpenClaw returned no spoken text.");
-      return text.slice(0,1200);
+      return completeSpokenReply(text).slice(0,1200);
     },
   };
 }

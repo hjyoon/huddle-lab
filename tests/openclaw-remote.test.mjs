@@ -97,6 +97,21 @@ test("one Gateway session is opened and reclaimed per call, with distinct runs f
   assert.notEqual(calls.filter(c=>c.method==="sessions.create")[1].params.key,created[0].params.key);
   await second.close();
 });
+test("a terminal promise to check later becomes an immediate answer without another Gateway run",async()=>{
+  let response="네, 알아볼게요.";
+  const {backend,calls}=fixture(({method})=>method==="agent.wait"?{
+    status:"ok",terminalReply:{disposition:"visible",text:response},
+  }:undefined);
+  const question=[{role:"user",content:"슬랙 연결 가능해?"}];
+  const session=await backend.openSession();
+  assert.match(await session.reply(question),/이 통화에서 외부 서비스의 상태를 직접 확인할 수는 없어요/);
+  const requests=()=>calls.filter(call=>call.method==="agent");
+  assert.equal(requests().length,1);
+  assert.match(requests()[0].params.message,/cannot send a follow-up/);
+  response="OpenClaw는 슬랙 연동을 지원하지만, 현재 설정은 이 통화에서 확인할 수 없어요.";
+  assert.equal(await session.reply(question),response);
+  await session.close();
+});
 test("an agent with callable tools never receives a voice turn",async()=>{
   const {backend,calls}=fixture(({method})=>method==="tools.effective"
     ? {agentId:voiceAgent,groups:[{tools:[{id:"exec"}]}]}:undefined);

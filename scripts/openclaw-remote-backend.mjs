@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { createLocalSpeechBackend } from "./local-speech.mjs";
 import { runOwned } from "./claude-process.mjs";
+import { completeSpokenReply, spokenReplyInstructions } from "./openclaw-spoken-reply.mjs";
 
 class GatewayError extends Error {
   constructor(message, { rejected = false, runNotFound = false, missingWorkerWorkspace = false } = {}) {
@@ -217,7 +218,7 @@ export function createRemoteOpenClawBackend({cwd=process.cwd(),runtimeRoot=resol
           if (latest?.role !== "user" || typeof latest.content !== "string" || !latest.content.trim()) {
             throw new GatewayError("Huddle 발화가 비어 있습니다.");
           }
-          const message = "Reply in the user's language in one or two short spoken sentences. Use plain text without Markdown.\n\n" + latest.content;
+          const message = `${spokenReplyInstructions}\n\n${latest.content}`;
           const runId = randomUUID();
           let accepted = false;
           let finished = false;
@@ -247,7 +248,7 @@ export function createRemoteOpenClawBackend({cwd=process.cwd(),runtimeRoot=resol
                 typeof result.terminalReply.text !== "string" || !result.terminalReply.text.trim()) {
               throw new GatewayError("원격 모델 실행은 끝났지만 읽어 줄 수 있는 완료 답변이 반환되지 않았습니다.");
             }
-            return result.terminalReply.text.trim().slice(0, 1200);
+            return completeSpokenReply(result.terminalReply.text.trim()).slice(0, 1200);
           } catch (error) {
             if (!accepted && error instanceof GatewayError && error.rejected) throw error;
             if (!finished) {
