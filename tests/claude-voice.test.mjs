@@ -35,7 +35,18 @@ test("Claude CLI parser uses completed result, passes history on stdin and disab
  assert.equal(await backend.reply([{role:'user',content:'hello'}],new AbortController().signal),'안녕하세요.');
  assert.equal(captured.args[captured.args.indexOf('--tools')+1],'');
  assert.equal(captured.args[captured.args.indexOf('--mcp-config')+1],'{"mcpServers":{}}');
+ assert.match(captured.args[captured.args.indexOf('--system-prompt')+1],/distinguish general support from the current connection status/);
  assert.match(captured.options.input,/hello/);assert.equal(captured.args.includes('hello'),false);
+});
+test("Claude completes standalone promises before speech synthesis without another CLI request",async()=>{
+ let calls=0;
+ const backend=createLocalClaudeBackend({run:async(_,__,options)=>{
+  calls++;
+  options.onLine(JSON.stringify({type:'result',is_error:false,result:'네, 알아볼게요.'}));
+ }});
+ const reply=await backend.reply([{role:'user',content:'슬랙 연결 가능해?'}],new AbortController().signal);
+ assert.match(reply,/이 통화에서 외부 서비스의 상태를 직접 확인할 수는 없어요/);
+ assert.equal(calls,1);
 });
 test("Claude authentication failure is not reported as a spoken model answer",async()=>{
  const backend=createLocalClaudeBackend({run:async(_,__,options)=>{

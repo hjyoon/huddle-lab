@@ -6,10 +6,20 @@ import { stat } from "node:fs/promises";
 import { WebSocketServer } from "ws";
 import { openCodexRpc } from "./codex-rpc.mjs";
 import { serveDemoFile } from "./serve-demo.mjs";
+import { immediateReplyInstructions } from "./spoken-reply.mjs";
 
 const run = promisify(execFile);
 const text = (value) => String(value ?? "Codex request failed").replace(/[\x00-\x1f]/g, " ").slice(0, 1000);
-export async function createCodexHost({ port = 4182, cwd = process.cwd(), binary = "codex",
+
+const codexVoiceInstructions = [
+  "This is a local voice call. Speak Korean by default and follow the user's language preference.",
+  immediateReplyInstructions,
+  "The workspace is read-only. Follow the existing tool permission policy.",
+  "Answer general questions directly. Delegate code questions to Codex when repository work is needed and allowed. Wait for the result before claiming any findings.",
+  "A turn starting with <realtime_delegation> is a spoken request. Put the result or the specific limitation in the final answer so the voice model can speak it in the same call.",
+].join(" ");
+
+export async function createCodexHost({ port = 4182, cwd = process.cwd(), binary = "codex", model,
   runtimeRoot = resolve(cwd, ".huddle-runtime/codex"), createRpc = openCodexRpc, allowedOrigins = [] } = {}) {
   if (!isAbsolute(cwd) || !(await stat(cwd)).isDirectory()) throw new Error("Choose an existing absolute Codex workspace.");
   let url, active, status, checking;
@@ -77,8 +87,9 @@ export async function createCodexHost({ port = 4182, cwd = process.cwd(), binary
         if (!account.account && account.requiresOpenaiAuth !== false) throw new Error("Sign in using codex login before starting voice.");
         const result = await session.rpc.request("thread/start", {
           cwd, sandbox: "read-only", approvalPolicy: "on-request", ephemeral: true,
+          model,
           config: { "features.realtime_conversation": true, "realtime.type": "conversational" },
-          developerInstructions: "This is a local Korean voice conversation. Keep spoken replies concise. The workspace is read-only. Follow the user's spoken requests and the existing tool permission policy.",
+          developerInstructions: codexVoiceInstructions,
         }, session.abort.signal);
         if (!result.thread?.id) throw new Error("Codex did not allocate a voice thread.");
         session.threadId = result.thread.id;
@@ -121,7 +132,9 @@ export async function createCodexHost({ port = 4182, cwd = process.cwd(), binary
         session.realtime = true;
         session.starting = session.rpc.request(method, { threadId: session.threadId,
           transport: { type: "webrtc", sdp: params.transport.sdp }, version: "v3", outputModality: "audio", clientManagedHandoffs: false,
-          realtimeStartInstructions: "Speak Korean unless asked otherwise. Answer naturally and briefly. Delegate code questions to Codex; never claim results before they return.",
+          delegationAckFiller: false,
+          initialItems: [{ role: "developer", text: codexVoiceInstructions }],
+          realtimeStartInstructions: codexVoiceInstructions,
         });
         return session.starting;
       }

@@ -21,6 +21,7 @@ npm run demo:codex
 - `PORT=4190 npm run demo:codex`: HTTP 포트 변경.
 - `HUDDLE_WORKSPACE=/absolute/project npm run demo:codex`: 대화에서 참고할 작업 폴더.
 - `HUDDLE_CODEX_BINARY=/absolute/bin/codex npm run demo:codex`: CLI 경로 선택.
+- `HUDDLE_CODEX_MODEL=gpt-5.6-sol npm run demo`: 이 Huddle에서 위임 작업을 처리할 Codex 모델 지정.
 - `npm run demo:agent`: 외부 모델을 사용하지 않는 기존 연결 구조 테스트.
 
 Codex는 기존 설정·로그인·상태 경로를 사용합니다. 프로젝트의 `.huddle-runtime/`는
@@ -83,6 +84,9 @@ Chrome의 원격 RTP 재생 시계를 시작하는 muted Audio 요소도 함께 
 
 음성은 Codex의 실시간 서비스로 전송되며 로컬 전용 처리는 아닙니다. 앱은 별도 녹음 파일을 만들지 않습니다.
 모델 선택·인증 갱신·코드 질문의 에이전트 위임은 설치된 Codex가 담당합니다.
+Buzz 1.0.5와 같이 위임된 작업의 결과는 같은 통화에서 읽을 수 있도록 위임 턴의 최종 답변에 담습니다.
+일반 질문에는 바로 답하고, 현재 상태를 확인할 수 없는 경우에는 통화에서 확인 범위와 확인 방법을 안내하도록 지시합니다.
+v3 세션에서는 위임 시작 멘트를 끄고 음성 모델과 위임을 처리하는 Codex 양쪽에 답변 지침을 전달합니다.
 
 ## 검증 범위
 

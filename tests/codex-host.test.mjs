@@ -25,7 +25,7 @@ async function client(host) {
   return { ws, request(method, params = {}) { return new Promise((resolve) => { const key = ++id; pending.set(key, resolve); ws.send(JSON.stringify({ id:key,method,params })); }); } };
 }
 test("Codex host owns a read-only thread and limits browser requests to its voice session", async (t) => {
-  const f = fixture(), host = await createCodexHost({ port:0, createRpc: f.createRpc });
+  const f = fixture(), host = await createCodexHost({ port:0, createRpc: f.createRpc, model:"host-model" });
   t.after(() => host.close());
   const status = await (await fetch(host.url + "/codex/status")).json();
   assert.equal(status.ready, true); assert.equal(status.mode, "read-only");
@@ -33,11 +33,20 @@ test("Codex host owns a read-only thread and limits browser requests to its voic
   assert.deepEqual((await c.request("voice/open")).result, { threadId:"owned",mode:"read-only" });
   const thread = f.calls.find((call) => call.method === "thread/start").params;
   assert.equal(thread.sandbox,"read-only"); assert.equal(thread.ephemeral,true);
+  assert.equal(thread.model,"host-model");
   assert.ok((await c.request("thread/realtime/start", { threadId:"other",transport:{type:"webrtc",sdp:"offer"} })).error);
   assert.ok((await c.request("turn/start", { threadId:"owned",input:[] })).error);
-  assert.ok((await c.request("thread/realtime/start", { threadId:"owned",transport:{type:"webrtc",sdp:"offer"},model:"untrusted" })).result);
+  assert.ok((await c.request("thread/realtime/start", {
+    threadId:"owned",transport:{type:"webrtc",sdp:"offer"},model:"untrusted",realtimeStartInstructions:"untrusted",
+  })).result);
   const start = f.calls.find((call) => call.method === "thread/realtime/start").params;
   assert.equal(start.model,undefined); assert.equal(start.version,"v3"); assert.equal(start.clientManagedHandoffs,false);
+  assert.equal(start.delegationAckFiller, false);
+  assert.equal(start.realtimeStartInstructions, thread.developerInstructions);
+  assert.deepEqual(start.initialItems, [{ role: "developer", text: thread.developerInstructions }]);
+  assert.match(start.realtimeStartInstructions, /Answer general questions directly/);
+  assert.match(start.realtimeStartInstructions, /distinguish general support from the current connection status/);
+  assert.match(thread.developerInstructions, /<realtime_delegation>.*final answer.*same call/);
   f.emit({method:"turn/started",params:{threadId:"owned",turn:{id:"turn"}}});
   await c.request("voice/interrupt",{threadId:"owned"});
   assert.ok(f.calls.some((c) => c.method === "turn/interrupt" && c.params.turnId === "turn"));

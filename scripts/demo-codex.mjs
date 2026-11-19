@@ -3,6 +3,7 @@ import { createCodexHost } from "./codex-host.mjs";
 const host = await createCodexHost({
   cwd: resolve(process.env.HUDDLE_WORKSPACE ?? process.cwd()),
   binary: process.env.HUDDLE_CODEX_BINARY ?? "codex",
+  model: process.env.HUDDLE_CODEX_MODEL || undefined,
   port: Number(process.env.PORT ?? 4182),
 });
 console.log(`Codex AI Huddle: ${host.url}/`);

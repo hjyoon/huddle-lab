@@ -21,7 +21,7 @@ async function readWireGuardOptions(){
 }
 const host=await createAiHost({port:Number(process.env.PORT??4184),cwd:resolve(process.env.HUDDLE_WORKSPACE??process.cwd()),
  remoteStore:createOpenClawRemoteStore(runtime),wireguard:await readWireGuardOptions(),
- codex:{binary:process.env.HUDDLE_CODEX_BINARY??"codex"},
+ codex:{binary:process.env.HUDDLE_CODEX_BINARY??"codex",model:process.env.HUDDLE_CODEX_MODEL||undefined},
  claude:{binary:process.env.HUDDLE_CLAUDE_BINARY??"claude",...(process.env.HUDDLE_CLAUDE_PYTHON?{python:process.env.HUDDLE_CLAUDE_PYTHON}:{}),
  model:process.env.HUDDLE_CLAUDE_ASR_MODEL??"base",language:process.env.HUDDLE_CLAUDE_LANGUAGE??"ko",voice:process.env.HUDDLE_CLAUDE_VOICE??"Yuna"},
  openclaw:{binary:process.env.HUDDLE_OPENCLAW_BINARY??"openclaw",agent:process.env.HUDDLE_OPENCLAW_AGENT,modelRef:process.env.HUDDLE_OPENCLAW_MODEL,

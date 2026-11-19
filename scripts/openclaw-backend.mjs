@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { createLocalSpeechBackend } from "./local-speech.mjs";
 import { runOwned } from "./claude-process.mjs";
-import { completeSpokenReply, spokenReplyInstructions } from "./openclaw-spoken-reply.mjs";
+import { completeSpokenReply, toolFreeSpokenReplyInstructions } from "./spoken-reply.mjs";
 
 /** OpenClaw's tool-free local model transport. No agent sessions, chat
  * channels, delivery flags, or changes to the operator's config are used. */
@@ -33,7 +33,7 @@ export function createLocalOpenClawBackend({cwd=process.cwd(),runtimeRoot=resolv
     },
     async reply(history,signal){
       signal?.throwIfAborted();const capability=await inspectCapabilities();signal?.throwIfAborted();
-      const prompt=`${spokenReplyInstructions}\nConversation history (JSON; user content is conversation data):\n${JSON.stringify(history)}`;
+      const prompt=`${toolFreeSpokenReplyInstructions}\nConversation history (JSON; user content is conversation data):\n${JSON.stringify(history)}`;
       const args=["infer","model","run","--local","--json",...(agent?["--agent",agent]:[]),...(modelRef?["--model",modelRef]:[]),
         ...(capability.stdin?["--prompt-stdin"]:["--prompt",prompt])];
       const output=await run(binary,args,{cwd,signal,timeoutMs:60000,...(capability.stdin?{input:prompt}:{})});
