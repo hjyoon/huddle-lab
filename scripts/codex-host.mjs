@@ -5,6 +5,7 @@ import { resolve, isAbsolute } from "node:path";
 import { stat } from "node:fs/promises";
 import { WebSocketServer } from "ws";
 import { openCodexRpc } from "./codex-rpc.mjs";
+import { readRealtimeHandoff } from "./codex-voice-input.mjs";
 import { serveDemoFile } from "./serve-demo.mjs";
 import { immediateReplyInstructions } from "./spoken-reply.mjs";
 
@@ -14,11 +15,10 @@ const text = (value) => String(value ?? "Codex request failed").replace(/[\x00-\
 const OPENCLAW_MAIN_TOOL = {
   type: "function",
   name: "run_openclaw_main",
-  description: "Ask the OpenClaw main agent to perform the user's authorized work or retrieve live information. Return its result to the current call.",
+  description: "Send the current spoken user utterance to the OpenClaw main agent and return its result to the call.",
   inputSchema: {
     type: "object",
-    properties: { task: { type: "string", description: "The requested work, including the relevant spoken context." } },
-    required: ["task"],
+    properties: {},
     additionalProperties: false,
   },
 };
@@ -28,12 +28,27 @@ const codexWorkInstructions = [
 ];
 const openClawWorkInstructions = [
   "Answer general questions directly. Delegate when the caller asks for work or live information that needs the OpenClaw agent.",
-  "For delegated work, call run_openclaw_main with the user's task. Wait for the tool result and report what the OpenClaw agent actually did or could not do.",
+];
+const gatewayEvidenceInstructions = [
+  "Delegate questions about the current connection, authentication, or permissions of Slack or any other OpenClaw tool.",
+  "Base claims about tool availability and access on the current OpenClaw result. A suggested plugin, earlier reply, or failed delegation is not evidence of a tool being disconnected.",
+  "Preserve the difference between a listed tool, a successful call, and an unverified or failed call. Recommend reauthentication only when the tool actually reports an authentication failure.",
+];
+const openClawVoicePrompt = [
+  "You are the real-time voice interface for OpenClaw. Speak Korean by default and follow the caller's language.",
+  "Send every question and task, including general questions and follow-ups, to the background agent through delegation.",
+  "You can briefly acknowledge a caller while waiting. Give the substantive answer only after receiving the OpenClaw result.",
+  "Speak that result faithfully, including any limitations it reports.",
+  ...gatewayEvidenceInstructions,
+].join(" ");
+const openClawAnswerInstructions = [
+  "For a delegated utterance, call run_openclaw_main exactly once with an empty object. The handoff supplies the original spoken request.",
+  "The Huddle host sends the actual OpenClaw result to the caller. Finish once the tool has returned.",
 ];
 const toolResponse = (success, result) => ({ success, contentItems: [{ type: "inputText", text: result }] });
 
 export async function createCodexHost({ port = 4182, cwd = process.cwd(), binary = "codex", model, voiceModel,
-  requireChatGpt = false, createGatewayBackend,
+  requireChatGpt = false, createGatewayBackend, gatewayPrimary = false,
   runtimeRoot = resolve(cwd, ".huddle-runtime/codex"), createRpc = openCodexRpc, allowedOrigins = [] } = {}) {
   if (!isAbsolute(cwd) || !(await stat(cwd)).isDirectory()) throw new Error("Choose an existing absolute Codex workspace.");
   let url, active, status, checking;
@@ -41,8 +56,14 @@ export async function createCodexHost({ port = 4182, cwd = process.cwd(), binary
   const codexVoiceInstructions = [
     "This is a voice call. Speak Korean by default and follow the user's language preference.",
     immediateReplyInstructions,
-    ...(createGatewayBackend ? openClawWorkInstructions : codexWorkInstructions),
-    "A turn starting with <realtime_delegation> is a spoken request. Put the result or the specific limitation in the final answer so the voice model can speak it in the same call.",
+    ...(createGatewayBackend ? [
+      ...(gatewayPrimary ? [] : openClawWorkInstructions),
+      ...openClawAnswerInstructions,
+      ...gatewayEvidenceInstructions,
+    ] : [
+      ...codexWorkInstructions,
+      "A turn starting with <realtime_delegation> is a spoken request. Put the result or the specific limitation in the final answer so the voice model can speak it in the same call.",
+    ]),
   ].join(" ");
   const checkAccount = (account) => {
     if (requireChatGpt && account.account?.type !== "chatgpt") {
@@ -93,22 +114,46 @@ export async function createCodexHost({ port = 4182, cwd = process.cwd(), binary
   });
   websocket.on("connection", (client) => {
     const session = { abort: new AbortController(), rpc: undefined, threadId: undefined, opening: undefined,
-      starting: undefined, closing: undefined, realtime: false, turnId: undefined, pending: new Set() };
+      starting: undefined, closing: undefined, realtime: false, turnId: undefined, pending: new Set(),
+      handoffs: new Map(), turnInput: undefined };
     active = session;
     const send = (message) => { if (client.readyState === 1) client.send(JSON.stringify(message)); };
     const ensureThread = (params) => {
       if (!session.threadId || params.threadId !== session.threadId) throw new Error("This voice client does not own that Codex thread.");
     };
+    async function speakGatewayResult(turnId, success, message, signal = session.abort.signal) {
+      const canSpeak = () => session.realtime && !session.closing && session.turnId === turnId && !signal.aborted;
+      if (canSpeak()) {
+        try {
+          await session.rpc.request("thread/realtime/appendSpeech", {
+            threadId: session.threadId,
+            text: success ? `OpenClaw 확인 결과입니다. ${message}` : message,
+          }, signal);
+        } catch {
+          if (canSpeak()) {
+            const error = "OpenClaw 결과를 실시간 음성으로 전달하지 못했습니다.";
+            send({ method: "thread/realtime/error", params: { threadId: session.threadId, message: error } });
+            return toolResponse(false, error);
+          }
+        }
+      }
+      return toolResponse(success, message);
+    }
     async function handleToolCall(params) {
-      const task = params?.arguments?.task;
+      const args = params?.arguments;
       if (session.closing || !session.realtime || !session.gateway || !session.turnId ||
           params?.threadId !== session.threadId || params?.turnId !== session.turnId ||
           params?.tool !== OPENCLAW_MAIN_TOOL.name || params?.namespace != null ||
-          typeof task !== "string" || !task.trim() || task.length > 8000 ||
-          Object.keys(params.arguments).some(key => key !== "task")) {
+          !args || typeof args !== "object" || Array.isArray(args) || Object.keys(args).length !== 0) {
         return toolResponse(false, "현재 Huddle 통화에서 유효한 OpenClaw 업무 요청을 확인하지 못했습니다.");
       }
       if (session.delegation) return toolResponse(false, "이 통화의 OpenClaw 업무를 이미 실행 중입니다.");
+      const utterance = session.handoffs.get(session.turnInput);
+      if (!utterance) {
+        return speakGatewayResult(params.turnId, false, "이번 발화의 원문을 확인하지 못했습니다. 한 번 더 말씀해 주세요.");
+      }
+      session.handoffs.delete(session.turnInput);
+      session.turnInput = undefined;
       const controller = new AbortController();
       const delegation = { controller };
       session.delegation = delegation;
@@ -117,11 +162,11 @@ export async function createCodexHost({ port = 4182, cwd = process.cwd(), binary
           session.gatewaySession ??= session.gateway.openSession();
           const gateway = await session.gatewaySession;
           controller.signal.throwIfAborted();
-          const reply = await gateway.reply([{ role: "user", content: task.trim() }], controller.signal);
-          return toolResponse(true, reply);
+          const reply = await gateway.reply([{ role: "user", content: utterance }], controller.signal);
+          return await speakGatewayResult(params.turnId, true, reply, controller.signal);
         } catch (error) {
           if (error.fatal) session.delegationFailure = error;
-          return toolResponse(false, text(error.message));
+          return await speakGatewayResult(params.turnId, false, text(error.message), controller.signal);
         } finally {
           session.delegation = undefined;
         }
@@ -147,10 +192,27 @@ export async function createCodexHost({ port = 4182, cwd = process.cwd(), binary
             return;
           }
           if (params.threadId !== session.threadId) return;
+          if (session.gateway && session.realtime && message.method === "thread/realtime/itemAdded") {
+            const input = readRealtimeHandoff(params.item);
+            if (input) {
+              session.handoffs.set(input.message, input.utterance);
+              if (session.handoffs.size > 8) session.handoffs.delete(session.handoffs.keys().next().value);
+            }
+          }
+          if (session.gateway && message.method === "item/started" && params.turnId === session.turnId &&
+              params.item?.type === "userMessage" && Array.isArray(params.item.content)) {
+            session.turnInput = params.item.content.find(part => part?.type === "text" &&
+              typeof part.text === "string" && part.text.startsWith("<realtime_delegation>"))?.text;
+          }
           if (message.method === "turn/started" || message.method === "turn/completed") {
-            if (message.method === "turn/started") session.turnId = params.turn?.id;
+            if (message.method === "turn/started") {
+              session.turnId = params.turn?.id;
+              session.turnInput = undefined;
+            }
             else if (params.turn?.id === session.turnId) {
               session.turnId = undefined;
+              session.handoffs.delete(session.turnInput);
+              session.turnInput = undefined;
               void cancelDelegation().catch(() => {});
             }
             send({ method: message.method, params: { threadId: session.threadId, turn: { id: params.turn?.id } } });
@@ -169,9 +231,11 @@ export async function createCodexHost({ port = 4182, cwd = process.cwd(), binary
           }
         }
         const result = await session.rpc.request("thread/start", {
-          cwd, sandbox: "read-only", approvalPolicy: "on-request", ephemeral: true,
+          cwd, sandbox: "read-only", approvalPolicy: gatewayPrimary ? "never" : "on-request", ephemeral: true,
+          ...(gatewayPrimary ? { environments: [] } : {}),
           model: threadModel,
-          config: { "features.realtime_conversation": true, "realtime.type": "conversational" },
+          config: { "features.realtime_conversation": true, "realtime.type": "conversational",
+            ...(gatewayPrimary ? { "features.shell_tool": false, web_search: "disabled" } : {}) },
           developerInstructions: codexVoiceInstructions,
           ...(session.gateway ? { dynamicTools: [OPENCLAW_MAIN_TOOL] } : {}),
         }, session.abort.signal);
@@ -185,6 +249,8 @@ export async function createCodexHost({ port = 4182, cwd = process.cwd(), binary
       await session.starting?.catch(() => {});
       if (session.realtime && session.rpc && session.threadId) {
         session.realtime = false;
+        session.handoffs.clear();
+        session.turnInput = undefined;
         await session.rpc.request("thread/realtime/stop", { threadId: session.threadId });
       }
     };
@@ -219,10 +285,12 @@ export async function createCodexHost({ port = 4182, cwd = process.cwd(), binary
           params.transport.sdp.length > 120000) throw new Error("Invalid or duplicate Codex voice start.");
         session.realtime = true;
         session.starting = session.rpc.request(method, { threadId: session.threadId,
-          transport: { type: "webrtc", sdp: params.transport.sdp }, version: "v3", outputModality: "audio", clientManagedHandoffs: false,
+          transport: { type: "webrtc", sdp: params.transport.sdp }, version: "v3", outputModality: "audio",
+          clientManagedHandoffs: !!session.gateway,
           ...(voiceModel ? { model: voiceModel } : {}),
-          delegationAckFiller: false,
-          initialItems: [{ role: "developer", text: codexVoiceInstructions }],
+          delegationAckFiller: gatewayPrimary,
+          ...(gatewayPrimary ? { prompt: openClawVoicePrompt, includeStartupContext: false } : {}),
+          initialItems: [{ role: "developer", text: gatewayPrimary ? openClawVoicePrompt : codexVoiceInstructions }],
           realtimeStartInstructions: codexVoiceInstructions,
         });
         return session.starting;
@@ -233,9 +301,13 @@ export async function createCodexHost({ port = 4182, cwd = process.cwd(), binary
         return {};
       }
       if (method === "voice/interrupt") {
+        const turnId = session.turnId;
+        session.turnId = undefined;
+        session.handoffs.clear();
+        session.turnInput = undefined;
         await Promise.all([
           cancelDelegation(),
-          session.turnId ? session.rpc.request("turn/interrupt", { threadId: session.threadId, turnId: session.turnId }) : undefined,
+          turnId ? session.rpc.request("turn/interrupt", { threadId: session.threadId, turnId }) : undefined,
         ]);
         return {};
       }

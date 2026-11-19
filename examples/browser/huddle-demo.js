@@ -26,7 +26,7 @@ const render=()=>{
  const state=huddle?.snapshot(),phase=state?.phase??"idle",connected=phase==="connected";
  element("provider").disabled=!["idle","error"].includes(phase);
  element("openclaw-choice").hidden=selected!=="openclaw";
- element("remote-settings").hidden=selected!=="openclaw"||remoteMode!=="remote";
+ element("remote-settings").hidden=selected!=="openclaw"||remoteMode==="local";
  element("openclaw-mode").disabled=configuring||!["idle","error"].includes(phase);
  element("remote-fields").disabled=configuring||!["idle","error"].includes(phase);
  element("remote-recheck").hidden=!savedRemote;
@@ -56,6 +56,8 @@ const render=()=>{
 };
 async function choose(id){
  if(!Object.hasOwn(names,id)||!idle()){element("provider").value=selected;return;}
+ const gateway=id==="openclaw"&&remoteMode!=="local";
+ const realtime=id==="codex"||(gateway&&remoteMode==="remote-realtime");
  maskSecret();
  const token=++generation;checking?.abort();checking=new AbortController();const signal=checking.signal;
  const previous=huddle;off?.();off=undefined;huddle=undefined;ready=false;canLogin=false;selected=id;
@@ -63,12 +65,14 @@ async function choose(id){
  try{localStorage.setItem("huddle-ai",id);}catch{}
  element("setup").textContent=`${names[id]} 설치 및 연결 상태 확인 중…`;element("workspace").textContent="확인 중";
  element("description").textContent=id==="codex"?"Codex와 실시간 음성으로 대화합니다. 통화 음성은 Codex의 실시간 서비스로 전송합니다.":id==="claude"?"Claude Code와 음성으로 대화합니다. 음성 인식·합성은 Huddle 호스트에서 처리하고 인식한 대화 내용은 Claude 서비스로 전송합니다.":id==="hermes"?"Hermes Agent와 음성으로 대화합니다. 음성 인식·합성은 Huddle 호스트에서 처리하고 인식한 대화 내용은 Hermes API 서버로 전송합니다. Hermes는 자신의 도구를 사용할 수 있어 답변에 시간이 걸릴 수 있습니다.":"OpenClaw에 설정된 모델과 음성으로 대화합니다. 음성 인식·합성은 Huddle 호스트에서 처리하고 인식한 대화 내용은 설정된 모델 서비스로 전송합니다.";
- if(id==="openclaw"&&remoteMode==="remote")element("description").textContent="OpenClaw Gateway의 모델과 허용된 MCP 도구를 사용합니다. 음성 인식·합성은 Huddle 호스트에서 처리하고 인식한 대화 내용은 Gateway로 전송합니다.";
- element("hint").textContent=id==="codex"?"AI가 말하는 중에도 다시 말할 수 있습니다. 응답 중단 버튼은 같은 대화의 음성 채널을 다시 연결합니다.":"말을 마친 뒤 잠시 쉬면 답변합니다. AI가 말할 때 다시 말하면 응답을 중단합니다. 한 번에 30초까지 말할 수 있습니다.";
+ if(gateway)element("description").textContent=realtime
+  ?"실시간 음성은 Codex 서비스에서 처리합니다. 질문과 작업 요청은 OpenClaw main으로 전달하고 답변을 통화에서 읽습니다."
+  :"OpenClaw Gateway의 모델과 허용된 도구를 사용합니다. 음성 인식·합성은 Huddle 호스트에서 처리하고 인식한 대화 내용은 Gateway로 전송합니다.";
+ element("hint").textContent=realtime?"AI가 말하는 중에도 다시 말할 수 있습니다. 응답 중단 버튼은 같은 대화의 음성 채널을 다시 연결합니다.":"말을 마친 뒤 잠시 쉬면 답변합니다. AI가 말할 때 다시 말하면 응답을 중단합니다. 한 번에 30초까지 말할 수 있습니다.";
  render();
  try{
   await previous?.dispose();if(token!==generation)return;
-  if(id==="openclaw"&&remoteMode==="remote"){
+  if(gateway){
    const response=await fetch("/api/providers/openclaw/remote",{signal});if(!response.ok)throw new Error("원격 설정을 확인할 수 없습니다.");
    const config=await response.json();if(token!==generation)return;
    const keepValue=usingSavedSecret&&config.url===savedUrl&&config.authType===savedAuthType;
@@ -88,12 +92,14 @@ async function choose(id){
   element("workspace").textContent=status.workspace??"확인할 수 없음";
   ready=!!status.ready&&!status.busy;
   canLogin=!!status.needsLogin&&!!status.canLogin;
-  const connection=id==="codex"
+  const connection=realtime
     ? [status.voiceModel??"연결 준비됨",status.delegateAgent? `OpenClaw ${status.delegateAgent}`:undefined].filter(Boolean).join(" · ")
     : `로컬 음성 엔진 준비됨${status.modelName?` · ${status.modelName}`:""}`;
   element("setup").textContent=ready?`${status.version} · ${connection}`:(status.needsLogin?`${status.error} ${canLogin?"아래 버튼으로 브라우저에서 로그인하거나 ":"Huddle 호스트의 "}터미널에서 claude auth login을 실행해 주세요.`:status.error??(status.busy?"이미 통화 중입니다. 종료 후 다시 선택해 주세요.":"선택한 AI의 설치·로그인 상태를 확인해 주세요."));
   if(ready){
-   const provider=id==="codex"?createCodexVoiceProvider({connect:createCodexLocalConnector(status.wsUrl)}):id==="claude"?createClaudeVoiceProvider({url:status.wsUrl}):id==="hermes"?createHermesVoiceProvider({url:status.wsUrl}):createOpenClawVoiceProvider({url:status.wsUrl});
+   const provider=id==="codex"||status.voiceTransport==="codex-realtime"
+    ? createCodexVoiceProvider({connect:createCodexLocalConnector(status.wsUrl)})
+    : id==="claude"?createClaudeVoiceProvider({url:status.wsUrl}):id==="hermes"?createHermesVoiceProvider({url:status.wsUrl}):createOpenClawVoiceProvider({url:status.wsUrl});
    huddle=createAgentHuddle({provider,openAudio:openWebAudio});off=huddle.subscribe(render);
   }
  }catch(error){if(token===generation&&!signal.aborted)element("setup").textContent=error.message;}
@@ -188,6 +194,6 @@ element("login").onclick=async()=>{
 element("start").onclick=()=>{maskSecret();render();void huddle?.start();};element("mute").onclick=()=>huddle?.mute();element("interrupt").onclick=()=>{void huddle?.interrupt();};element("stop").onclick=()=>{void huddle?.leave();};
 window.addEventListener("pagehide",()=>{maskSecret();generation++;checking?.abort();off?.();void huddle?.dispose();});
 try{selected=Object.hasOwn(names,localStorage.getItem("huddle-ai"))?localStorage.getItem("huddle-ai"):"codex";}catch{}
-try{remoteMode=localStorage.getItem("huddle-openclaw-mode")==="remote"?"remote":"local";element("remote-url").value=localStorage.getItem("huddle-openclaw-url")??"";}catch{}
+try{const savedMode=localStorage.getItem("huddle-openclaw-mode");if(["remote","remote-realtime"].includes(savedMode))remoteMode=savedMode;element("remote-url").value=localStorage.getItem("huddle-openclaw-url")??"";}catch{}
 element("openclaw-mode").value=remoteMode;
 void choose(selected);

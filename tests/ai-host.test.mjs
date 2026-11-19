@@ -18,6 +18,53 @@ test('the opted-in host shows main as the effective agent for a saved legacy Gat
  assert.equal(response.agent,'main');
  assert.equal(response.configured,true);
 });
+test('OpenClaw realtime uses ChatGPT audio with the saved main Gateway and locks its configuration during a call',async t=>{
+ const f=providerFixtures(), requests=[];
+ const remote={url:'wss://remote.example/',token:'fixture-token',agent:'main'};
+ const host=await createAiHost({port:0,...f,codex:{
+  openclawMain:true,model:'coordinator',async createRpc(){return{
+   subscribe(){},async close(){},async request(method,params){
+    requests.push({method,params});
+    if(method==='account/read')return{account:{type:'chatgpt'}};
+    if(method==='thread/start')return{thread:{id:'voice-thread'}};
+    return{};
+   },
+  };},
+ },openclawRemote:{remote,backend:f.openclaw.backend,async run(_,args){
+  if(args[2]==='health')return JSON.stringify({ok:true,agents:[{agentId:'main'}]});
+  if(args[2]==='agent.wait')return JSON.stringify({status:'timeout'});
+  throw new Error('Unexpected readiness RPC');
+ }}});
+ t.after(()=>host.close());
+ const inspect=async mode=>(await fetch(host.url+'/api/providers/openclaw?mode='+mode)).json();
+ const realtime=await inspect('remote-realtime'),local=await inspect('remote');
+ assert.equal(realtime.ready,true);
+ assert.equal(realtime.voiceModel,'gpt-live-1.1-codex');
+ assert.equal(realtime.agentId,'main');
+ assert.equal(realtime.voiceTransport,'codex-realtime');
+ assert.notEqual(realtime.wsUrl,local.wsUrl);
+ assert.equal(JSON.stringify(realtime).includes(remote.token),false);
+ const ws=await socket(realtime.wsUrl,host.url);
+ t.after(()=>ws.terminate());
+ const request=async(id,method,params={})=>{
+  const response=message(ws);ws.send(JSON.stringify({id,method,params}));return response;
+ };
+ assert.equal((await request(1,'voice/open')).result.threadId,'voice-thread');
+ assert.ok((await request(2,'thread/realtime/start',{threadId:'voice-thread',transport:{type:'webrtc',sdp:'offer'}})).result);
+ assert.equal(requests.find(call=>call.method==='thread/start').params.dynamicTools[0].name,'run_openclaw_main');
+ const start=requests.find(call=>call.method==='thread/realtime/start').params;
+ assert.equal(start.model,'gpt-live-1.1-codex');
+ assert.equal(start.version,'v3');
+ assert.match(start.prompt,/Send every question and task/);
+ const save=()=>fetch(host.url+'/api/providers/openclaw/remote',{method:'POST',headers:{Origin:host.url,'Content-Type':'application/json'},
+  body:JSON.stringify({...remote,agent:'specialist'})});
+ assert.equal((await save()).status,409);
+ assert.ok((await request(3,'voice/close')).result);
+ assert.equal((await save()).status,200);
+ const other=await inspect('remote-realtime');
+ assert.equal(other.ready,false);
+ assert.match(other.error,/main 에이전트/);
+});
 test('AI selector exposes all providers and trusts only its own origin on child hosts',async t=>{
  const f=providerFixtures(),host=await createAiHost({port:0,...f});t.after(()=>host.close());
  assert.deepEqual(await(await fetch(host.url+'/api/providers')).json(),[{id:'codex',name:'Codex'},{id:'claude',name:'Claude'},{id:'openclaw',name:'OpenClaw'},{id:'hermes',name:'Hermes'}]);

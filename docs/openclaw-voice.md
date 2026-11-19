@@ -1,17 +1,36 @@
 # OpenClaw 음성 제공자
 
 `npm run demo`의 `http://127.0.0.1:4184/`에서 **대화할 AI → OpenClaw**를 선택합니다.
-OpenClaw에 설정된 모델·인증으로 대화하고, 음성 인식과 합성은 Huddle 호스트에서 처리합니다.
-선택한 모델 이름도 연결 상태 옆에 표시합니다.
+연결 방식과 음성 모델은 준비 상태에 표시합니다.
+
+## Gateway 실시간 음성
+
+Huddle 호스트에서 Codex를 ChatGPT 계정으로 로그인하고
+`HUDDLE_CODEX_OPENCLAW_MAIN=1 npm run demo`로 실행합니다.
+**OpenClaw → Gateway (실시간 음성)**에서 저장된 Gateway 연결을 사용합니다.
+에이전트가 비어 있거나 `main` 또는 기존 `huddle-voice`로 저장된 연결은 `main`을 사용합니다.
+
+`gpt-live-1.1-codex`가 WebRTC로 통화 음성을 처리합니다. 실시간 음성에 일반 질문과 업무 요청을
+OpenClaw `main`에 위임하도록 지시합니다. 첫 위임에서 통화 전용 Gateway 세션을 열고
+이후 위임에서 같은 세션을 사용합니다. Gateway는 모델·도구 권한·승인·Worker 배정을 처리합니다.
+Huddle은 현재 위임과 같은 Codex 턴에 속한 음성 인식 원문을 Gateway에 전달합니다.
+연결 상태를 묻는 발화는 해당 Gateway 세션의 도구 목록과 읽기 전용 호출 결과로 확인합니다.
+실시간 음성이 짧게 접수 사실을 알립니다. Gateway의 완료 답변은 Huddle 호스트에서 실시간 음성 채널로 직접 전달합니다.
+Worker 배정과 도구 실행을 포함해 Gateway의 완료 답변을 최대 180초 기다립니다.
+
+통화 중 끼어들기와 명시적 중단은 Codex 실시간 음성 경로를 사용합니다. 통화를 종료하면
+해당 Gateway 세션의 실행을 중단하고 Worker 회수를 요청합니다.
+
+## 로컬 모델
 
 로컬 경로는 `openclaw infer model run --local --json`을 사용하는 **도구 없는 모델 대화**입니다.
 대화 기록은 Huddle이 관리합니다. OpenClaw의 기존 에이전트 세션·메모리·도구·메신저 채널을
 연결하는 기능은 포함하지 않습니다. 로컬 모드는 `agent`, `message`, `--deliver` 경로를 호출하지 않습니다.
 여기서 `--local`은 로컬 CLI 실행을 뜻하며, 인식된 텍스트는 설정된 모델 서비스로 전송됩니다.
 
-## Gateway와 MCP
+## Gateway 로컬 음성
 
-1. 통합 화면에서 **OpenClaw → Gateway (MCP)**를 선택합니다.
+1. 통합 화면에서 **OpenClaw → Gateway (로컬 음성)**을 선택합니다.
 2. **Gateway 주소**에 `wss://gateway.example`을 입력합니다. Huddle 호스트의 Gateway 또는 SSH 터널은
    `ws://127.0.0.1:18789` 같은 loopback 주소로 연결합니다.
 3. **인증 방식**에서 토큰 또는 비밀번호를 선택하고 해당 정보를 입력합니다.

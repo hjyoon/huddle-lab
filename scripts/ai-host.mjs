@@ -9,7 +9,7 @@ import { createWireGuardHttps } from "./wireguard-https.mjs";
 
 /** Provider hosts accept only the selector's origin. */
 export async function createAiHost({port=4184,cwd=process.cwd(),codex={},claude={},openclaw={},openclawRemote={},hermes={},remoteStore,wireguard}={}) {
-  let url,remoteHost,remoteSettings,storageError,configuring=false,mutation,closing,vpnHost;
+  let url,remoteHost,remoteRealtimeHost,remoteSettings,storageError,configuring=false,mutation,closing,vpnHost;
   const providers=new Map();
   const {openclawMain,...codexOptions}=codex;
   const remoteOptions={...openclaw,...openclawRemote,backend:openclawRemote.backend,mode:"remote"};
@@ -17,11 +17,15 @@ export async function createAiHost({port=4184,cwd=process.cwd(),codex={},claude=
   const startRemote=remote=>createOpenClawHost({
     ...remoteOptions,remote,cwd,port:0,allowedOrigins:[url],mainVoice:usesMainVoice(remote),
   });
-  const remoteBusy=()=>remoteHost?.busy||(openclawMain&&providers.get("codex")?.host.busy);
-  const createGatewayBackend=openclawMain?()=>{
+  const remoteBusy=()=>remoteHost?.busy||remoteRealtimeHost?.busy||(openclawMain&&providers.get("codex")?.host.busy);
+  const createGatewayBackend=openclawMain?turnTimeoutMs=>{
     if(configuring||!remoteSettings)throw new Error("OpenClaw의 Gateway 연결을 먼저 설정해 주세요.");
-    return createRemoteOpenClawBackend({...remoteOptions,cwd,remote:remoteSettings,mainDelegation:true});
+    return createRemoteOpenClawBackend({...remoteOptions,cwd,remote:remoteSettings,mainDelegation:true,turnTimeoutMs});
   }:undefined;
+  const realtimeGateway=()=>{
+    if(remoteSettings&&!usesMainVoice(remoteSettings))throw new Error("실시간 Gateway 통화에는 main 에이전트 연결이 필요합니다.");
+    return createGatewayBackend(180000);
+  };
   try{
     remoteSettings=await remoteStore?.load()??(remoteOptions.remote?.url?validateRemoteSettings(remoteOptions.remote):undefined);
   }catch{
@@ -117,8 +121,8 @@ export async function createAiHost({port=4184,cwd=process.cwd(),codex={},claude=
     const match=path.match(/^\/api\/providers\/(codex|claude|openclaw|hermes)$/);
     if(match&&req.method==="GET"){
       const id=match[1],mode=requestUrl.searchParams.get("mode")??"local";
-      if(id==="openclaw"&&!["local","remote"].includes(mode)){json(400,{error:"Unknown OpenClaw mode."});return;}
-      const remote=id==="openclaw"&&mode==="remote";
+      if(id==="openclaw"&&!["local","remote","remote-realtime"].includes(mode)){json(400,{error:"Unknown OpenClaw mode."});return;}
+      const remote=id==="openclaw"&&mode!=="local",realtime=remote&&mode==="remote-realtime";
       if(remote&&configuring){json(503,{ready:false,error:"원격 설정 적용 중입니다."});return;}
       if(id==="codex"&&openclawMain&&(configuring||!remoteSettings)){
         json(200,{id,name:"Codex",ready:false,error:storageError??"OpenClaw의 Gateway 연결을 먼저 설정해 주세요."});return;
@@ -126,13 +130,28 @@ export async function createAiHost({port=4184,cwd=process.cwd(),codex={},claude=
       if(remote&&!remoteSettings){
         json(200,{id,name:"OpenClaw",mode,ready:false,busy:false,error:storageError??"화면에서 원격 Gateway 주소와 인증 정보를 입력해 주세요."});return;
       }
-      const entry=remote?{name:"OpenClaw",host:remoteHost}:providers.get(id);
+      if(realtime&&!remoteRealtimeHost){
+        json(200,{id,name:"OpenClaw",mode,ready:false,error:"이 Huddle 호스트에서 실시간 Gateway 통화를 활성화해 주세요."});return;
+      }
+      const entry=remote?{name:"OpenClaw",host:realtime?remoteRealtimeHost:remoteHost}:providers.get(id);
       if(!entry?.host){json(503,{ready:false,error:"AI host is starting."});return;}
       try{
-        const status=await fetch(`${entry.host.url}/${id}/status`,{signal:AbortSignal.timeout(remote?65000:45000)});
+        const transport=realtime?"codex":id;
+        const realtimeBackend=realtime?realtimeGateway():undefined;
+        const [status,gateway]=await Promise.all([
+          fetch(`${entry.host.url}/${transport}/status`,{signal:AbortSignal.timeout(remote?65000:45000)}),
+          realtimeBackend?.inspect(),
+        ]);
         if(!status.ok)throw new Error("Could not read the selected AI status.");
         const metadata=await status.json();
-        const wsUrl=vpn?`${origin.replace("https:","wss:")}/voice/${remote?"openclaw-remote":id}`:`${entry.host.url.replace("http:","ws:")}/${id}`;
+        if(realtime){
+          metadata.ready=metadata.ready&&gateway.ready;
+          metadata.error=metadata.error??gateway.error;
+          metadata.agentId=gateway.agentId;
+          metadata.voiceTransport="codex-realtime";
+        }
+        const route=realtime?"openclaw-realtime":remote?"openclaw-remote":id;
+        const wsUrl=vpn?`${origin.replace("https:","wss:")}/voice/${route}`:`${entry.host.url.replace("http:","ws:")}/${transport}`;
         json(200,{...metadata,canLogin:!vpn&&!!metadata.canLogin,...(id==="openclaw"?{mode}:{}),id,name:entry.name,wsUrl});
       }catch(error){json(200,{id,name:entry.name,ready:false,error:error.message});}
       return;
@@ -142,9 +161,10 @@ export async function createAiHost({port=4184,cwd=process.cwd(),codex={},claude=
   }
   const server=createServer((req,res)=>handleRequest(req,res,url));
   function lookupVoice(route){
-    const id=route?.match(/^\/voice\/(codex|claude|openclaw|openclaw-remote|hermes)$/)?.[1];
+    const id=route?.match(/^\/voice\/(codex|claude|openclaw|openclaw-remote|openclaw-realtime|hermes)$/)?.[1];
     if(!id||closing)return undefined;
     if(id==="openclaw-remote")return !configuring&&remoteHost?`${remoteHost.url}/openclaw`:undefined;
+    if(id==="openclaw-realtime")return !configuring&&remoteRealtimeHost&&remoteSettings&&usesMainVoice(remoteSettings)?`${remoteRealtimeHost.url}/codex`:undefined;
     const provider=providers.get(id);
     return provider?`${provider.host.url}/${id}`:undefined;
   }
@@ -155,6 +175,7 @@ export async function createAiHost({port=4184,cwd=process.cwd(),codex={},claude=
     await vpnHost?.close();
     await mutation?.catch(()=>{});
     await Promise.allSettled([...providers.values()].map(entry=>entry.host.close()));
+    await remoteRealtimeHost?.close();
     await remoteHost?.close();
     await closed;
   })();
@@ -163,6 +184,10 @@ export async function createAiHost({port=4184,cwd=process.cwd(),codex={},claude=
       ...codexOptions,cwd,port:0,allowedOrigins:[url],createGatewayBackend,
       ...(openclawMain?{requireChatGpt:true,voiceModel:codexOptions.voiceModel??"gpt-live-1.1-codex"}:{}),
     })});
+    if(openclawMain)remoteRealtimeHost=await createCodexHost({
+      ...codexOptions,cwd,port:0,allowedOrigins:[url],createGatewayBackend:realtimeGateway,gatewayPrimary:true,
+      requireChatGpt:true,voiceModel:codexOptions.voiceModel??"gpt-live-1.1-codex",
+    });
     providers.set("claude",{name:"Claude",host:await createClaudeHost({...claude,cwd,port:0,allowedOrigins:[url]})});
     providers.set("openclaw",{name:"OpenClaw",host:await createOpenClawHost({...openclaw,cwd,port:0,allowedOrigins:[url]})});
     providers.set("hermes",{name:"Hermes",host:await createHermesHost({...hermes,cwd,port:0,allowedOrigins:[url]})});
