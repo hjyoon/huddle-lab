@@ -32,15 +32,17 @@ SQLite 경로를 임의로 바꾸면 기존 세션의 backfill 때문에 초기�
 
 ## OpenClaw 업무 위임
 
-통합 화면에서 **OpenClaw → Gateway (MCP)** 연결을 저장한 다음
+통합 화면에서 **OpenClaw → Gateway (로컬 음성)** 연결을 저장한 다음
 `HUDDLE_CODEX_OPENCLAW_MAIN=1 npm run demo`로 실행하고 **Codex**를 선택합니다.
 Codex 음성은 호스트의 ChatGPT 로그인으로 연결합니다. 기본 음성 모델은
 `gpt-live-1.1-codex`이며, 준비 상태에 음성 모델과 위임 대상 `main`이 표시됩니다.
 업무 요청을 전달할 Codex 텍스트 모델은 현재 로그인 계정의 기본 모델을 사용합니다.
 `HUDDLE_CODEX_MODEL`이 지정되어 있으면 해당 모델을 선택합니다.
-이 모드에서는 기존 **OpenClaw → Gateway (MCP)** 연결도 에이전트가 비어 있거나
+이 모드에서는 기존 **OpenClaw → Gateway (로컬 음성)** 연결도 에이전트가 비어 있거나
 `huddle-voice`로 저장된 경우 `main`을 사용합니다. 기존 로컬 음성 인식·합성으로
 통화할 때도 Gateway가 `main`의 도구 권한과 승인을 처리합니다.
+같은 Gateway에서 일반 질문도 OpenClaw에 맡기도록 구성하려면
+[OpenClaw → Gateway (실시간 음성)](openclaw-voice.md#gateway-실시간-음성)을 선택합니다.
 별도 체크아웃에서 데모를 실행할 때는 `HUDDLE_RUNTIME_DIR`로 기존
 `.huddle-runtime`의 실제 경로를 지정해 저장된 Gateway 연결을 사용할 수 있습니다.
 

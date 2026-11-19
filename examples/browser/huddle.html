@@ -9,7 +9,7 @@
 </style></head><body>
 <h1>AI Huddle</h1>
 <div class="choice"><label for="provider">대화할 AI</label><select id="provider" aria-label="대화할 AI"><option value="codex">Codex</option><option value="claude">Claude</option><option value="openclaw">OpenClaw</option><option value="hermes">Hermes</option></select></div>
-<div id="openclaw-choice" class="choice" hidden><label for="openclaw-mode">OpenClaw 연결</label><select id="openclaw-mode"><option value="local">로컬 모델</option><option value="remote">Gateway (MCP)</option></select></div>
+<div id="openclaw-choice" class="choice" hidden><label for="openclaw-mode">OpenClaw 연결</label><select id="openclaw-mode"><option value="local">로컬 모델</option><option value="remote">Gateway (로컬 음성)</option><option value="remote-realtime">Gateway (실시간 음성)</option></select></div>
 <form id="remote-settings" hidden autocomplete="off">
 <fieldset id="remote-fields"><legend>원격 OpenClaw</legend>
 <div id="remote-editor">

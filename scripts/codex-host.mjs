@@ -30,10 +30,20 @@ const openClawWorkInstructions = [
   "Answer general questions directly. Delegate when the caller asks for work or live information that needs the OpenClaw agent.",
   "For delegated work, call run_openclaw_main with the user's task. Wait for the tool result and report what the OpenClaw agent actually did or could not do.",
 ];
+const openClawVoicePrompt = [
+  "You are the real-time voice interface for OpenClaw. Speak Korean by default and follow the caller's language.",
+  "Send every question and task, including general questions and follow-ups, to the background agent through delegation.",
+  "You can briefly acknowledge a caller while waiting. Give the substantive answer only after receiving the OpenClaw result.",
+  "Speak that result faithfully, including any limitations it reports.",
+].join(" ");
+const openClawAnswerInstructions = [
+  "For every delegated utterance, call run_openclaw_main exactly once with the user's original request and any necessary context.",
+  "Use the returned OpenClaw result as your final answer. If it fails, return the specific error so it can be spoken to the caller.",
+];
 const toolResponse = (success, result) => ({ success, contentItems: [{ type: "inputText", text: result }] });
 
 export async function createCodexHost({ port = 4182, cwd = process.cwd(), binary = "codex", model, voiceModel,
-  requireChatGpt = false, createGatewayBackend,
+  requireChatGpt = false, createGatewayBackend, gatewayPrimary = false,
   runtimeRoot = resolve(cwd, ".huddle-runtime/codex"), createRpc = openCodexRpc, allowedOrigins = [] } = {}) {
   if (!isAbsolute(cwd) || !(await stat(cwd)).isDirectory()) throw new Error("Choose an existing absolute Codex workspace.");
   let url, active, status, checking;
@@ -41,7 +51,7 @@ export async function createCodexHost({ port = 4182, cwd = process.cwd(), binary
   const codexVoiceInstructions = [
     "This is a voice call. Speak Korean by default and follow the user's language preference.",
     immediateReplyInstructions,
-    ...(createGatewayBackend ? openClawWorkInstructions : codexWorkInstructions),
+    ...(gatewayPrimary ? openClawAnswerInstructions : createGatewayBackend ? openClawWorkInstructions : codexWorkInstructions),
     "A turn starting with <realtime_delegation> is a spoken request. Put the result or the specific limitation in the final answer so the voice model can speak it in the same call.",
   ].join(" ");
   const checkAccount = (account) => {
@@ -169,9 +179,11 @@ export async function createCodexHost({ port = 4182, cwd = process.cwd(), binary
           }
         }
         const result = await session.rpc.request("thread/start", {
-          cwd, sandbox: "read-only", approvalPolicy: "on-request", ephemeral: true,
+          cwd, sandbox: "read-only", approvalPolicy: gatewayPrimary ? "never" : "on-request", ephemeral: true,
+          ...(gatewayPrimary ? { environments: [] } : {}),
           model: threadModel,
-          config: { "features.realtime_conversation": true, "realtime.type": "conversational" },
+          config: { "features.realtime_conversation": true, "realtime.type": "conversational",
+            ...(gatewayPrimary ? { "features.shell_tool": false, web_search: "disabled" } : {}) },
           developerInstructions: codexVoiceInstructions,
           ...(session.gateway ? { dynamicTools: [OPENCLAW_MAIN_TOOL] } : {}),
         }, session.abort.signal);
@@ -221,8 +233,9 @@ export async function createCodexHost({ port = 4182, cwd = process.cwd(), binary
         session.starting = session.rpc.request(method, { threadId: session.threadId,
           transport: { type: "webrtc", sdp: params.transport.sdp }, version: "v3", outputModality: "audio", clientManagedHandoffs: false,
           ...(voiceModel ? { model: voiceModel } : {}),
-          delegationAckFiller: false,
-          initialItems: [{ role: "developer", text: codexVoiceInstructions }],
+          delegationAckFiller: gatewayPrimary,
+          ...(gatewayPrimary ? { prompt: openClawVoicePrompt, includeStartupContext: false } : {}),
+          initialItems: [{ role: "developer", text: gatewayPrimary ? openClawVoicePrompt : codexVoiceInstructions }],
           realtimeStartInstructions: codexVoiceInstructions,
         });
         return session.starting;

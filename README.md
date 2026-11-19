@@ -16,7 +16,7 @@ npm run demo
 `http://127.0.0.1:4184/`에서 **대화할 AI**를 고르고 **통화 시작**을 누릅니다.
 선택한 AI에 맞춰 연결 상태·음성 처리 안내와 통화 버튼이 바뀝니다. 통화 중에는 선택을 잠그며,
 종료 후 다른 AI로 바꿀 수 있습니다. 선택을 바꾸면 이전 연결과 화면의 대화 기록을 정리합니다.
-OpenClaw는 **로컬 모델 / Gateway (MCP)**를 선택할 수 있습니다. Gateway 모드에서는 화면에 Gateway 주소,
+OpenClaw는 **로컬 모델 / Gateway (로컬 음성) / Gateway (실시간 음성)**을 선택할 수 있습니다. Gateway 모드에서는 화면에 Gateway 주소,
 토큰 또는 비밀번호, 에이전트 ID(선택)를 입력하고 **저장 · 연결 확인**을 누릅니다.
 Gateway의 전용 에이전트에 허용된 MCP 도구를 통화에서 사용할 수 있습니다.
 인증 정보는 Huddle 호스트에 저장되어 서버를 재시작해도 사용할 수 있습니다. 지우려면 **저장된 인증 삭제**를 누릅니다.
@@ -25,7 +25,7 @@ Gateway의 전용 에이전트에 허용된 MCP 도구를 통화에서 사용할
 | --- | --- | --- |
 | Codex | 로컬 Codex의 실시간 WebRTC 음성 | Codex CLI와 기존 로그인 |
 | Claude | 로컬 Whisper → Claude Code → 로컬 음성 합성 | 음성 엔진, Claude Code 로그인 |
-| OpenClaw | 로컬 Whisper → 로컬 CLI 또는 Gateway의 모델 → 로컬 음성 합성 | 음성 엔진, OpenClaw CLI, 모델 또는 Gateway 인증 |
+| OpenClaw | Gateway 실시간 음성은 Codex WebRTC와 OpenClaw `main` 사용. 로컬 음성은 Whisper와 로컬 합성 엔진 사용 | OpenClaw CLI와 Gateway 인증, 실시간 음성은 Codex의 ChatGPT 로그인 |
 | Hermes | 로컬 Whisper → Hermes API 서버(Runs API) → 로컬 음성 합성 | 음성 엔진, Hermes API 서버 주소·키(`HUDDLE_HERMES_URL`, `HUDDLE_HERMES_KEY`) |
 
 [Codex 연결 안내](docs/codex-voice.md), [Claude 연결 안내](docs/claude-voice.md), [OpenClaw 연결 안내](docs/openclaw-voice.md), [Hermes 연결 안내](docs/hermes-voice.md)에 설정과 검증 범위를 정리했습니다.

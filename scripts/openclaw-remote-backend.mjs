@@ -101,12 +101,12 @@ export function validateRemoteSettings(value) {
 
 /** The CLI handles Gateway pairing. Each voice call owns one Gateway session. */
 export function createRemoteOpenClawBackend({cwd=process.cwd(),runtimeRoot=resolve(cwd,".huddle-runtime/claude"),
-  binary="openclaw",remote,python,model="base",language="ko",voice,run=runOwned,mainDelegation=false,mainVoice=false}={}) {
+  binary="openclaw",remote,python,model="base",language="ko",voice,run=runOwned,mainDelegation=false,mainVoice=false,turnTimeoutMs}={}) {
   const usesMainTools = mainDelegation || mainVoice;
   const settings=remote?.url?validateRemoteSettings(usesMainTools?{...remote,agent:"main"}:remote):undefined;
   const speech=mainDelegation?undefined:createLocalSpeechBackend({cwd,runtimeRoot,...(python?{python}:{}),model,language,voice,run});
   // A cold Worker can require node provisioning and an image pull before inference.
-  const turnTimeoutMs = usesMainTools ? 120000 : 60000;
+  turnTimeoutMs ??= usesMainTools ? 120000 : 60000;
   let selectedAgent,blocked;
   const env=settings?{...process.env,OPENCLAW_GATEWAY_URL:settings.url,OPENCLAW_GATEWAY_TOKEN:settings.token??"",OPENCLAW_GATEWAY_PASSWORD:settings.password??""}:undefined;
   const call=async(method,params={},signal,timeout=15000)=>{
