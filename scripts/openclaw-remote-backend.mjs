@@ -20,6 +20,8 @@ function gatewaySpokenReplyInstructions(mainDelegation) {
     immediateReplyInstructions,
     `Use the ${tool}s available to this Gateway session when you need live information or the user asks you to perform an authorized action.`,
     `If the relevant ${tool} is deferred, use the Gateway's tool search and dispatch capabilities to find and call it.`,
+    "Treat a caller's report of a connection problem as a report to verify. For current access questions, check the session's actual tool inventory and run a relevant read-only tool if available.",
+    "Distinguish tool discovery from a successful live call. An unavailable delegation or missing evidence leaves access unverified. Recommend reauthentication or permission changes only when an actual call confirms the corresponding error.",
     "Wait for the tool result before giving the final spoken answer. Say what you verified or did, or explain what was unavailable, denied, or failed.",
     "Finish within this turn. Do not start work in the background or promise a separate follow-up message.",
   ].join(" ");
