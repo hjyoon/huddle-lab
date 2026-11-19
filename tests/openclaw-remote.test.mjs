@@ -91,8 +91,8 @@ test("one Gateway session is opened and reclaimed per call, with distinct runs f
     assert.equal(params.modelRun,undefined);
     assert.equal(params.promptMode,undefined);
   }
-  assert.match(starts[1].params.message,/다시 인사$/);
-  assert.doesNotMatch(starts[1].params.message,/기존 답변|안녕하세요\./);
+  assert.equal(starts[1].params.message,"다시 인사");
+  assert.match(starts[1].params.extraSystemPrompt,/Use the MCP tools available to this Gateway session/);
   const second=await backend.openSession();
   assert.notEqual(calls.filter(c=>c.method==="sessions.create")[1].params.key,created[0].params.key);
   await second.close();
@@ -104,27 +104,43 @@ test("a terminal promise to check later becomes an immediate answer without anot
   }:undefined);
   const question=[{role:"user",content:"슬랙 연결 가능해?"}];
   const session=await backend.openSession();
-  assert.match(await session.reply(question),/이 통화에서 외부 서비스의 상태를 직접 확인할 수는 없어요/);
+  assert.match(await session.reply(question),/이번 요청에서 확인된 결과를 받지 못했어요/);
   const requests=()=>calls.filter(call=>call.method==="agent");
   assert.equal(requests().length,1);
-  assert.match(requests()[0].params.message,/cannot send a follow-up/);
+  assert.equal(requests()[0].params.message,question[0].content);
+  assert.match(requests()[0].params.extraSystemPrompt,/Wait for the tool result before giving the final spoken answer/);
   response="OpenClaw는 슬랙 연동을 지원하지만, 현재 설정은 이 통화에서 확인할 수 없어요.";
   assert.equal(await session.reply(question),response);
   await session.close();
 });
-test("an agent with callable tools never receives a voice turn",async()=>{
+test("callable non-MCP tools block a voice turn even when MCP tools are configured",async()=>{
   const {backend,calls}=fixture(({method})=>method==="tools.effective"
-    ? {agentId:voiceAgent,groups:[{tools:[{id:"exec"}]}]}:undefined);
-  await assert.rejects(backend.openSession(),/도구 사용을 차단/);
+    ? {agentId:voiceAgent,groups:[{tools:[{id:"docs__read",source:"mcp"},{id:"exec",source:"core"}]}]}:undefined);
+  await assert.rejects(backend.openSession(),/MCP 도구만 허용/);
   assert.equal(calls.some(call=>call.method==="agent"),false);
   assert.deepEqual(calls.find(call=>call.method==="sessions.reclaim").params,
     {key:calls.find(call=>call.method==="sessions.create").params.key});
 });
-test("a configured MCP server is rejected before its tools are discovered",async()=>{
-  const {backend,calls}=fixture(({method})=>method==="tools.effective"
-    ? {agentId:voiceAgent,groups:[],notices:[{id:"mcp-not-yet-connected",servers:["fixture"]}]}:undefined);
-  await assert.rejects(backend.openSession(),/도구 사용을 차단/);
-  assert.equal(calls.some(call=>call.method==="agent"),false);
+test("voice sessions accept both discovered and as-yet undiscovered MCP tools and read the terminal result",async()=>{
+  for (const inventory of [
+    {groups:[{tools:[{id:"docs__read",source:"mcp"},{id:"exec",source:"core",deniedBySession:true}]}]},
+    {groups:[],notices:[{id:"mcp-not-yet-connected",servers:["docs"]}]},
+  ]) {
+    const final="문서 MCP에서 확인한 정책은 읽기 전용이에요.";
+    const {backend,calls}=fixture(({method})=>{
+      if(method==="tools.effective")return {agentId:voiceAgent,...inventory};
+      if(method==="agent.wait")return {status:"ok",terminalReply:{disposition:"visible",text:final}};
+    });
+    const session=await backend.openSession();
+    const question="문서 MCP에서 정책을 확인해 줘.";
+    assert.equal(await session.reply([{role:"user",content:question}]),final);
+    const start=calls.find(call=>call.method==="agent").params;
+    assert.equal(start.message,question);
+    assert.match(start.extraSystemPrompt,/Use the MCP tools available/);
+    assert.doesNotMatch(start.extraSystemPrompt,/has no tools/);
+    assert.equal(calls.findLast(call=>call.method==="agent.wait").params.runId,start.idempotencyKey);
+    await session.close();
+  }
 });
 test("a local Gateway session without a worker workspace closes without a reclaim error",async()=>{
   let sessionKey;

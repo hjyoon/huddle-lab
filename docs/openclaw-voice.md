@@ -9,13 +9,13 @@ OpenClaw에 설정된 모델·인증으로 대화하고, 음성 인식과 합성
 연결하는 기능은 포함하지 않습니다. 로컬 모드는 `agent`, `message`, `--deliver` 경로를 호출하지 않습니다.
 여기서 `--local`은 로컬 CLI 실행을 뜻하며, 인식된 텍스트는 설정된 모델 서비스로 전송됩니다.
 
-## 원격 Gateway: 화면에서 설정
+## Gateway와 MCP
 
-1. 통합 화면에서 **OpenClaw → 원격 Gateway**를 선택합니다.
-2. **Gateway 주소**에 `wss://gateway.example`을 입력합니다. SSH 터널을 열어 둔 경우
-   `ws://127.0.0.1:18789` 같은 loopback 주소도 사용할 수 있습니다.
+1. 통합 화면에서 **OpenClaw → Gateway (MCP)**를 선택합니다.
+2. **Gateway 주소**에 `wss://gateway.example`을 입력합니다. 이 Mac의 Gateway 또는 SSH 터널은
+   `ws://127.0.0.1:18789` 같은 loopback 주소로 연결합니다.
 3. **인증 방식**에서 토큰 또는 비밀번호를 선택하고 해당 정보를 입력합니다.
-4. **전용 에이전트 ID**를 비워 두면 `huddle-voice`를 사용합니다. 다른 ID를 입력할 때도 Gateway에서 해당 에이전트의 도구를 모두 차단해야 합니다.
+4. **전용 에이전트 ID**를 비워 두면 `huddle-voice`를 사용합니다. 해당 에이전트에 사용할 MCP 도구를 허용합니다.
 5. **저장 · 연결 확인**을 누르고 준비 완료가 표시되면 통화를 시작합니다.
 
 브라우저는 로컬 Huddle 서버에만 연결합니다. 로컬 서버가 설치된 OpenClaw CLI를 통해 원격 Gateway에 연결하므로
@@ -33,13 +33,20 @@ Huddle은 조회 연결에 이어 모델 요청을 보내지 않는 `agent.wait`
 브라우저는 AI 선택·로컬/원격 모드·마지막으로 적용한 주소를 저장합니다. **저장된 인증 삭제**는 로컬 인증 파일과
 현재 원격 연결 설정을 삭제합니다. 기기 승인은 운영 Gateway의 Devices에서 관리합니다. 통화 중 설정 변경과 삭제는 제한됩니다.
 
-원격 모드는 통화마다 `sessions.create`로 Gateway 세션을 열고, `tools.effective`로 도구 차단 상태를 확인합니다.
+MCP 서버는 Gateway의 `mcp.servers`에 등록합니다. 전용 에이전트의 도구 정책에서
+`docs__read`처럼 필요한 MCP 도구 이름을 허용합니다. 세션이 샌드박스에서 실행되면 샌드박스 도구 정책에서도 허용해야 합니다.
+통화 연결 시 `tools.effective`로 점검하며, 목록에 MCP 이외에 호출 가능한 도구가 있으면 연결을 거절합니다.
+도구의 실제 접근과 승인에는 [OpenClaw의 도구 정책](https://docs.openclaw.ai/gateway/config-tools/tool-policy)이 적용됩니다.
+새 세션의 MCP 도구는 첫 실행에서 발견될 수 있습니다. [MCP 서버 설정](https://docs.openclaw.ai/tools/mcp)을 참고합니다.
+
+Gateway 모드는 통화마다 `sessions.create`로 세션을 엽니다.
 통화가 열려 있는 동안 발화마다 새 `runId`로 같은 세션의 표준 `agent` 실행을 요청합니다.
 EKS Worker는 Gateway의 배정 정책에 따라 그 세션에 붙습니다. Huddle은 현재 발화만 보냅니다.
 대화 기록은 Gateway의 일반 세션 보존 정책을 따릅니다.
 
-답변은 `agent.wait`의 `terminalReply`로 받아 통화 안에서 읽습니다. 모델과 인증은 전용 에이전트의 Gateway 설정을 사용합니다.
-외부 서비스의 연결 상태를 직접 조회할 수 없는 질문에는 그 자리에서 확인 방법을 안내합니다.
+발화와 답변 지침은 별도 필드로 전송합니다. 에이전트가 MCP 작업을 수행하면
+`agent.wait`의 `terminalReply`로 최종 결과를 받아 같은 통화에서 읽습니다. 모델과 인증은 전용 에이전트의 Gateway 설정을 사용합니다.
+도구가 없거나 접근이 거부되거나 실행에 실패하면 그 상태와 확인 방법을 안내하도록 지시합니다.
 통화가 종료되면 진행 중인 실행의 종료를 확인하고, 해당 세션의 Worker 회수를 요청합니다.
 
 끼어들면 로컬 오디오 재생을 즉시 중단하고, `chat.abort`에 **해당 Huddle의 정확한 session/run ID**를 전달한 뒤
@@ -106,8 +113,8 @@ Claude와 OpenClaw는 `src/local-voice/`, `scripts/local-voice-host.mjs`, `scrip
 이전 발화 번호의 늦은 오디오는 재생하지 않습니다. 끼어들기에 소켓 재연결은 필요하지 않습니다.
 
 Huddle 호스트의 메모리에는 통화별로 최대 20개 항목·24,000자까지 유지합니다. 입력은 최대 30초이며
-발화 종료 뒤 Whisper → 모델 응답 완료 → 합성 → 재생 순으로 처리합니다. 도구 실행이나
-토큰 단위 음성 스트리밍은 현재 범위에 포함하지 않습니다. 임시 WAV와 합성 파일은 작업 후 삭제합니다.
+발화 종료 뒤 Whisper → Gateway 모드의 MCP 실행을 포함한 모델 응답 완료 → 합성 → 재생 순으로 처리합니다.
+임시 WAV와 합성 파일은 작업 후 삭제합니다.
 
 ## 이전 모델 전용 모드 검증: 2026-11-18
 

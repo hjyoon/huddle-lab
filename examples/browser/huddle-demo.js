@@ -62,7 +62,7 @@ async function choose(id){
  try{localStorage.setItem("huddle-ai",id);}catch{}
  element("setup").textContent=`${names[id]} 설치 및 연결 상태 확인 중…`;element("workspace").textContent="확인 중";
  element("description").textContent=id==="codex"?"Codex와 실시간 음성으로 대화합니다. 통화 음성은 Codex의 실시간 서비스로 전송합니다.":id==="claude"?"Claude Code와 음성으로 대화합니다. 음성 인식·합성은 이 Mac에서 처리하고 인식한 대화 내용은 Claude 서비스로 전송합니다.":"OpenClaw에 설정된 모델과 음성으로 대화합니다. 음성 인식·합성은 이 Mac에서 처리하고 인식한 대화 내용은 설정된 모델 서비스로 전송합니다.";
- if(id==="openclaw"&&remoteMode==="remote")element("description").textContent="원격 OpenClaw Gateway의 모델과 음성으로 대화합니다. 음성 인식·합성은 이 Mac에서 처리하고 인식한 대화 내용은 원격 Gateway로 전송합니다.";
+ if(id==="openclaw"&&remoteMode==="remote")element("description").textContent="OpenClaw Gateway의 모델과 허용된 MCP 도구를 사용합니다. 음성 인식·합성은 이 Mac에서 처리하고 인식한 대화 내용은 Gateway로 전송합니다.";
  element("hint").textContent=id==="codex"?"AI가 말하는 중에도 다시 말할 수 있습니다. 응답 중단 버튼은 같은 대화의 음성 채널을 다시 연결합니다.":"말을 마친 뒤 잠시 쉬면 답변합니다. AI가 말할 때 다시 말하면 응답을 중단합니다. 한 번에 30초까지 말할 수 있습니다.";
  render();
  try{

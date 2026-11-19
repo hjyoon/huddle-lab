@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { createLocalSpeechBackend } from "./local-speech.mjs";
 import { runOwned } from "./claude-process.mjs";
-import { completeSpokenReply, toolFreeSpokenReplyInstructions } from "./spoken-reply.mjs";
+import { completeSpokenReply, immediateReplyInstructions } from "./spoken-reply.mjs";
 
 class GatewayError extends Error {
   constructor(message, { rejected = false, runNotFound = false, missingWorkerWorkspace = false } = {}) {
@@ -14,6 +14,13 @@ class GatewayError extends Error {
 }
 
 const DEFAULT_VOICE_AGENT = "huddle-voice";
+const gatewaySpokenReplyInstructions = [
+  immediateReplyInstructions,
+  "Use the MCP tools available to this Gateway session when you need live information or the user asks you to perform an authorized action.",
+  "If the relevant MCP tool is deferred, use the Gateway's tool search and dispatch capabilities to find and call it.",
+  "Wait for the tool result before giving the final spoken answer. Say what you verified or did, or explain what was unavailable, denied, or failed.",
+  "Finish within this turn. Do not start work in the background or promise a separate follow-up message.",
+].join(" ");
 
 function runFailure(result) {
   const detail = typeof result.error === "string" ? result.error : result.error?.message ?? "";
@@ -137,7 +144,7 @@ export function createRemoteOpenClawBackend({cwd=process.cwd(),runtimeRoot=resol
   const backend={
     ...speech,
     async inspect(){
-      const result={workspace:cwd,engine:"OpenClaw",mode:"remote",tools:false,modelName:"Gateway 기본 모델"};
+      const result={workspace:cwd,engine:"OpenClaw",mode:"remote",modelName:"Gateway 기본 모델"};
       let checkingSpeech=false;
       try{
         if(blocked)throw new Error(blocked);
@@ -199,11 +206,11 @@ export function createRemoteOpenClawBackend({cwd=process.cwd(),runtimeRoot=resol
       })();
       try {
         const inventory = await call("tools.effective", { sessionKey });
+        // A new session may discover its MCP catalog only when the first run starts.
         if (inventory.agentId !== agentId || !Array.isArray(inventory.groups) ||
-            inventory.groups.some(group => !Array.isArray(group.tools) ||
-              group.tools.some(tool => tool.deniedBySession !== true)) ||
-            inventory.notices?.some(notice => notice.id.startsWith("mcp-") && notice.servers?.length)) {
-          throw new GatewayError("원격 Huddle 에이전트의 도구 사용을 차단한 뒤 다시 연결해 주세요.");
+            inventory.groups.some(group => !Array.isArray(group?.tools) ||
+              group.tools.some(tool => tool?.deniedBySession !== true && tool?.source !== "mcp"))) {
+          throw new GatewayError("Gateway의 전용 Huddle 에이전트에서 MCP 도구만 허용한 뒤 다시 연결해 주세요.");
         }
       } catch (error) {
         await close().catch(() => {});
@@ -218,7 +225,6 @@ export function createRemoteOpenClawBackend({cwd=process.cwd(),runtimeRoot=resol
           if (latest?.role !== "user" || typeof latest.content !== "string" || !latest.content.trim()) {
             throw new GatewayError("Huddle 발화가 비어 있습니다.");
           }
-          const message = `${toolFreeSpokenReplyInstructions}\n\n${latest.content}`;
           const runId = randomUUID();
           let accepted = false;
           let finished = false;
@@ -227,7 +233,10 @@ export function createRemoteOpenClawBackend({cwd=process.cwd(),runtimeRoot=resol
           const workSignal = signal ? AbortSignal.any([signal, timeout.signal]) : timeout.signal;
           try {
             // Wait for the acknowledgement so an interrupt can target its exact run.
-            const start = await call("agent", { agentId, sessionKey, message, deliver: false, idempotencyKey: runId });
+            const start = await call("agent", {
+              agentId, sessionKey, message: latest.content, extraSystemPrompt: gatewaySpokenReplyInstructions,
+              deliver: false, idempotencyKey: runId,
+            });
             if (start.runId !== runId || start.status !== "accepted") {
               throw new GatewayError("Gateway가 실행 접수를 예상한 형식으로 응답하지 않았습니다.");
             }
@@ -248,7 +257,7 @@ export function createRemoteOpenClawBackend({cwd=process.cwd(),runtimeRoot=resol
                 typeof result.terminalReply.text !== "string" || !result.terminalReply.text.trim()) {
               throw new GatewayError("원격 모델 실행은 끝났지만 읽어 줄 수 있는 완료 답변이 반환되지 않았습니다.");
             }
-            return completeSpokenReply(result.terminalReply.text.trim()).slice(0, 1200);
+            return completeSpokenReply(result.terminalReply.text.trim(), { toolRun: true }).slice(0, 1200);
           } catch (error) {
             if (!accepted && error instanceof GatewayError && error.rejected) throw error;
             if (!finished) {
