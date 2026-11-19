@@ -3,8 +3,9 @@ import { openWebAudio } from "../../dist/web-audio/index.js";
 import { createCodexVoiceProvider,createCodexLocalConnector } from "../../dist/codex-voice/index.js";
 import { createClaudeVoiceProvider } from "../../dist/claude-voice/index.js";
 import { createOpenClawVoiceProvider } from "../../dist/openclaw-voice/index.js";
+import { createHermesVoiceProvider } from "../../dist/hermes-voice/index.js";
 const element=id=>document.getElementById(id);
-const names={codex:"Codex",claude:"Claude",openclaw:"OpenClaw"};
+const names={codex:"Codex",claude:"Claude",openclaw:"OpenClaw",hermes:"Hermes"};
 const vpnAccess=location.protocol==="https:";
 let huddle,off,ready=false,selected="codex",generation=0,checking,remoteMode="local",configuring=false;
 let savedRemote=false,remoteStorageError=false;
@@ -61,7 +62,7 @@ async function choose(id){
  element("provider").value=id;
  try{localStorage.setItem("huddle-ai",id);}catch{}
  element("setup").textContent=`${names[id]} 설치 및 연결 상태 확인 중…`;element("workspace").textContent="확인 중";
- element("description").textContent=id==="codex"?"Codex와 실시간 음성으로 대화합니다. 통화 음성은 Codex의 실시간 서비스로 전송합니다.":id==="claude"?"Claude Code와 음성으로 대화합니다. 음성 인식·합성은 이 Mac에서 처리하고 인식한 대화 내용은 Claude 서비스로 전송합니다.":"OpenClaw에 설정된 모델과 음성으로 대화합니다. 음성 인식·합성은 이 Mac에서 처리하고 인식한 대화 내용은 설정된 모델 서비스로 전송합니다.";
+ element("description").textContent=id==="codex"?"Codex와 실시간 음성으로 대화합니다. 통화 음성은 Codex의 실시간 서비스로 전송합니다.":id==="claude"?"Claude Code와 음성으로 대화합니다. 음성 인식·합성은 이 Mac에서 처리하고 인식한 대화 내용은 Claude 서비스로 전송합니다.":id==="hermes"?"Hermes Agent와 음성으로 대화합니다. 음성 인식·합성은 이 Mac에서 처리하고 인식한 대화 내용은 Hermes API 서버로 전송합니다. Hermes는 자신의 도구를 사용할 수 있어 답변에 시간이 걸릴 수 있습니다.":"OpenClaw에 설정된 모델과 음성으로 대화합니다. 음성 인식·합성은 이 Mac에서 처리하고 인식한 대화 내용은 설정된 모델 서비스로 전송합니다.";
  if(id==="openclaw"&&remoteMode==="remote")element("description").textContent="OpenClaw Gateway의 모델과 허용된 MCP 도구를 사용합니다. 음성 인식·합성은 이 Mac에서 처리하고 인식한 대화 내용은 Gateway로 전송합니다.";
  element("hint").textContent=id==="codex"?"AI가 말하는 중에도 다시 말할 수 있습니다. 응답 중단 버튼은 같은 대화의 음성 채널을 다시 연결합니다.":"말을 마친 뒤 잠시 쉬면 답변합니다. AI가 말할 때 다시 말하면 응답을 중단합니다. 한 번에 30초까지 말할 수 있습니다.";
  render();
@@ -89,7 +90,7 @@ async function choose(id){
   canLogin=!!status.needsLogin&&!!status.canLogin;
   element("setup").textContent=ready?`${status.version} · ${id!=="codex"?`로컬 음성 엔진 준비됨${status.modelName?` · ${status.modelName}`:""}`:"연결 준비됨"}`:(status.needsLogin?`${status.error} ${canLogin?"아래 버튼으로 브라우저에서 로그인하거나 ":"이 Mac의 "}터미널에서 claude auth login을 실행해 주세요.`:status.error??(status.busy?"이미 통화 중입니다. 종료 후 다시 선택해 주세요.":"선택한 AI의 설치·로그인 상태를 확인해 주세요."));
   if(ready){
-   const provider=id==="codex"?createCodexVoiceProvider({connect:createCodexLocalConnector(status.wsUrl)}):id==="claude"?createClaudeVoiceProvider({url:status.wsUrl}):createOpenClawVoiceProvider({url:status.wsUrl});
+   const provider=id==="codex"?createCodexVoiceProvider({connect:createCodexLocalConnector(status.wsUrl)}):id==="claude"?createClaudeVoiceProvider({url:status.wsUrl}):id==="hermes"?createHermesVoiceProvider({url:status.wsUrl}):createOpenClawVoiceProvider({url:status.wsUrl});
    huddle=createAgentHuddle({provider,openAudio:openWebAudio});off=huddle.subscribe(render);
   }
  }catch(error){if(token===generation&&!signal.aborted)element("setup").textContent=error.message;}

@@ -40,6 +40,10 @@
     "./openclaw-voice": {
       "types": "./dist/openclaw-voice/index.d.ts",
       "import": "./dist/openclaw-voice/index.js"
+    },
+    "./hermes-voice": {
+      "types": "./dist/hermes-voice/index.d.ts",
+      "import": "./dist/hermes-voice/index.js"
     }
   },
   "files": [

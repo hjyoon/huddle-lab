@@ -2,7 +2,7 @@
 
 Buzz 1.0.4에서 분리한 **사용자 ↔ AI 음성 대화 연결 코어**입니다.
 마이크 입력을 AI 음성 제공자에 보내고 응답 음성을 재생하는 계약과 수명을 관리합니다.
-통화 화면에서 **Codex, Claude 또는 OpenClaw를 선택**할 수 있습니다. 처음 선택값은 Codex이며, 이후에는 마지막 선택을 기억합니다.
+통화 화면에서 **Codex, Claude, OpenClaw 또는 Hermes를 선택**할 수 있습니다. 처음 선택값은 Codex이며, 이후에는 마지막 선택을 기억합니다.
 
 ## 실행
 
@@ -26,8 +26,9 @@ Gateway의 전용 에이전트에 허용된 MCP 도구를 통화에서 사용할
 | Codex | 로컬 Codex의 실시간 WebRTC 음성 | Codex CLI와 기존 로그인 |
 | Claude | 로컬 Whisper → Claude Code → macOS 음성 합성 | `npm run setup:voice`, Claude 로그인, macOS |
 | OpenClaw | 로컬 Whisper → 로컬 CLI 또는 원격 Gateway의 모델 → macOS 음성 합성 | `npm run setup:voice`, OpenClaw CLI, 모델 인증 또는 원격 Gateway 인증, macOS |
+| Hermes | 로컬 Whisper → Hermes API 서버(Runs API) → macOS 음성 합성 | `npm run setup:voice`, Hermes API 서버 주소·키(`HUDDLE_HERMES_URL`, `HUDDLE_HERMES_KEY`), macOS |
 
-[Codex 연결 안내](docs/codex-voice.md), [Claude 연결 안내](docs/claude-voice.md), [OpenClaw 연결 안내](docs/openclaw-voice.md)에 설정과 검증 범위를 정리했습니다.
+[Codex 연결 안내](docs/codex-voice.md), [Claude 연결 안내](docs/claude-voice.md), [OpenClaw 연결 안내](docs/openclaw-voice.md), [Hermes 연결 안내](docs/hermes-voice.md)에 설정과 검증 범위를 정리했습니다.
 현재 환경의 Claude 실제 모델 응답은 인증 갱신 후 확인해야 하며, 구현·자동 검증과 로컬 음성 엔진 검증을 완료했습니다.
 
 각 제공자의 독립 화면은 `npm run demo:codex`(4182), `npm run demo:claude`(4183)로 실행합니다.
@@ -78,6 +79,7 @@ await huddle.dispose();
 | 모듈 | 역할 |
 | --- | --- |
 | `huddle-lab/openclaw-voice` | OpenClaw 모델용 발화 감지·취소·음성 제공자 |
+| `huddle-lab/hermes-voice` | Hermes Agent API 서버용 발화 감지·취소·음성 제공자 |
 | `huddle-lab/claude-voice` | 로컬 Claude Code용 발화 감지·취소·음성 제공자 |
 | `huddle-lab/codex-voice` | 로컬 Codex WebRTC 제공자와 브라우저 커넥터 |
 | `huddle-lab/agent-voice` | 사용자와 AI의 직접 음성 세션, 상태·발화문·끼어들기 |

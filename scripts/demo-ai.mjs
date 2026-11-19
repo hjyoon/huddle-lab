@@ -26,7 +26,9 @@ const host=await createAiHost({port:Number(process.env.PORT??4184),cwd:resolve(p
  model:process.env.HUDDLE_CLAUDE_ASR_MODEL??"base",language:process.env.HUDDLE_CLAUDE_LANGUAGE??"ko",voice:process.env.HUDDLE_CLAUDE_VOICE??"Yuna"},
  openclaw:{binary:process.env.HUDDLE_OPENCLAW_BINARY??"openclaw",agent:process.env.HUDDLE_OPENCLAW_AGENT,modelRef:process.env.HUDDLE_OPENCLAW_MODEL,
  ...(process.env.HUDDLE_CLAUDE_PYTHON?{python:process.env.HUDDLE_CLAUDE_PYTHON}:{}),model:process.env.HUDDLE_CLAUDE_ASR_MODEL??"base",language:process.env.HUDDLE_CLAUDE_LANGUAGE??"ko",voice:process.env.HUDDLE_CLAUDE_VOICE??"Yuna"},
+ hermes:{settings:{url:process.env.HUDDLE_HERMES_URL,apiKey:process.env.HUDDLE_HERMES_KEY},
+ ...(process.env.HUDDLE_CLAUDE_PYTHON?{python:process.env.HUDDLE_CLAUDE_PYTHON}:{}),model:process.env.HUDDLE_CLAUDE_ASR_MODEL??"base",language:process.env.HUDDLE_CLAUDE_LANGUAGE??"ko",voice:process.env.HUDDLE_CLAUDE_VOICE??"Yuna"},
 });
-console.log(`AI Huddle (choose Codex, Claude or OpenClaw): ${host.url}/`);
+console.log(`AI Huddle (choose Codex, Claude, OpenClaw or Hermes): ${host.url}/`);
 if(host.vpnUrl)console.log(`AI Huddle over WireGuard: ${host.vpnUrl}/`);
 for(const signal of ["SIGINT","SIGTERM"])process.once(signal,()=>{void host.close().then(()=>process.exit(0));});

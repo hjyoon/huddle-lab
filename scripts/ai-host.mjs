@@ -2,12 +2,13 @@ import { createServer } from "node:http";
 import { createCodexHost } from "./codex-host.mjs";
 import { createOpenClawHost } from "./openclaw-host.mjs";
 import { createClaudeHost } from "./claude-host.mjs";
+import { createHermesHost } from "./hermes-host.mjs";
 import { serveDemoFile } from "./serve-demo.mjs";
 import { validateRemoteSettings } from "./openclaw-remote-backend.mjs";
 import { createWireGuardHttps } from "./wireguard-https.mjs";
 
 /** Provider hosts accept only the selector's origin. */
-export async function createAiHost({port=4184,cwd=process.cwd(),codex={},claude={},openclaw={},openclawRemote={},remoteStore,wireguard}={}) {
+export async function createAiHost({port=4184,cwd=process.cwd(),codex={},claude={},openclaw={},openclawRemote={},hermes={},remoteStore,wireguard}={}) {
   let url,remoteHost,remoteSettings,storageError,configuring=false,mutation,closing,vpnHost;
   const providers=new Map();
   const remoteOptions={...openclaw,...openclawRemote,backend:openclawRemote.backend,mode:"remote"};
@@ -103,7 +104,7 @@ export async function createAiHost({port=4184,cwd=process.cwd(),codex={},claude=
     if(path==="/api/providers"&&req.method==="GET"){
       json(200,[...providers].map(([id,entry])=>({id,name:entry.name})));return;
     }
-    const match=path.match(/^\/api\/providers\/(codex|claude|openclaw)$/);
+    const match=path.match(/^\/api\/providers\/(codex|claude|openclaw|hermes)$/);
     if(match&&req.method==="GET"){
       const id=match[1],mode=requestUrl.searchParams.get("mode")??"local";
       if(id==="openclaw"&&!["local","remote"].includes(mode)){json(400,{error:"Unknown OpenClaw mode."});return;}
@@ -128,7 +129,7 @@ export async function createAiHost({port=4184,cwd=process.cwd(),codex={},claude=
   }
   const server=createServer((req,res)=>handleRequest(req,res,url));
   function lookupVoice(route){
-    const id=route?.match(/^\/voice\/(codex|claude|openclaw|openclaw-remote)$/)?.[1];
+    const id=route?.match(/^\/voice\/(codex|claude|openclaw|openclaw-remote|hermes)$/)?.[1];
     if(!id||closing)return undefined;
     if(id==="openclaw-remote")return !configuring&&remoteHost?`${remoteHost.url}/openclaw`:undefined;
     const provider=providers.get(id);
@@ -148,6 +149,7 @@ export async function createAiHost({port=4184,cwd=process.cwd(),codex={},claude=
     providers.set("codex",{name:"Codex",host:await createCodexHost({...codex,cwd,port:0,allowedOrigins:[url]})});
     providers.set("claude",{name:"Claude",host:await createClaudeHost({...claude,cwd,port:0,allowedOrigins:[url]})});
     providers.set("openclaw",{name:"OpenClaw",host:await createOpenClawHost({...openclaw,cwd,port:0,allowedOrigins:[url]})});
+    providers.set("hermes",{name:"Hermes",host:await createHermesHost({...hermes,cwd,port:0,allowedOrigins:[url]})});
     if(remoteSettings)remoteHost=await startRemote(remoteSettings);
     if(wireguard)vpnHost=await createWireGuardHttps({...wireguard,port:wireguard.port??server.address().port,origin:url,handle:handleRequest,lookupVoice});
     return{url,vpnUrl:vpnHost?.url,close};
