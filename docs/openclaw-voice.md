@@ -1,7 +1,7 @@
 # OpenClaw 음성 제공자
 
 `npm run demo`의 `http://127.0.0.1:4184/`에서 **대화할 AI → OpenClaw**를 선택합니다.
-OpenClaw에 설정된 모델·인증으로 대화하고, 음성 인식과 합성은 Mac에서 처리합니다.
+OpenClaw에 설정된 모델·인증으로 대화하고, 음성 인식과 합성은 Huddle 호스트에서 처리합니다.
 선택한 모델 이름도 연결 상태 옆에 표시합니다.
 
 로컬 경로는 `openclaw infer model run --local --json`을 사용하는 **도구 없는 모델 대화**입니다.
@@ -12,14 +12,14 @@ OpenClaw에 설정된 모델·인증으로 대화하고, 음성 인식과 합성
 ## Gateway와 MCP
 
 1. 통합 화면에서 **OpenClaw → Gateway (MCP)**를 선택합니다.
-2. **Gateway 주소**에 `wss://gateway.example`을 입력합니다. 이 Mac의 Gateway 또는 SSH 터널은
+2. **Gateway 주소**에 `wss://gateway.example`을 입력합니다. Huddle 호스트의 Gateway 또는 SSH 터널은
    `ws://127.0.0.1:18789` 같은 loopback 주소로 연결합니다.
 3. **인증 방식**에서 토큰 또는 비밀번호를 선택하고 해당 정보를 입력합니다.
 4. **전용 에이전트 ID**를 비워 두면 `huddle-voice`를 사용합니다. 해당 에이전트에 사용할 MCP 도구를 허용합니다.
 5. **저장 · 연결 확인**을 누르고 준비 완료가 표시되면 통화를 시작합니다.
 
 브라우저는 로컬 Huddle 서버에만 연결합니다. 로컬 서버가 설치된 OpenClaw CLI를 통해 원격 Gateway에 연결하므로
-원격 모드에도 이 Mac의 OpenClaw CLI와 로컬 음성 엔진이 필요합니다. 토큰 외에 CLI 기기 페어링 승인이
+원격 모드에도 Huddle 호스트의 OpenClaw CLI와 로컬 음성 엔진이 필요합니다. 토큰 외에 CLI 기기 페어링 승인이
 필요한 Gateway라면 원격 서버에서 해당 기기를 승인해야 합니다. TLS와 기기 서명은 CLI가 처리합니다.
 Huddle은 조회 연결에 이어 모델 요청을 보내지 않는 `agent.wait` 조회로 실행 권한(`operator.write`)을 확인합니다.
 조회 기기를 승인한 뒤 실행 권한 추가 요청이 표시되면 운영 OpenClaw의 Devices에서 해당 요청을 검토하고 승인합니다.
@@ -54,7 +54,7 @@ EKS Worker는 Gateway의 배정 정책에 따라 그 세션에 붙습니다. Hud
 취소 확인 전에는 다음 발화의 추론을 시작하지 않습니다. 서버 실행 종료나 접수 여부를 확인하지 못하면
 통화를 닫고 새 요청을 차단합니다. 이때는 원격 Gateway의 실행 상태를 확인한 뒤 설정을 다시 적용합니다.
 
-이 경로의 흐름은 `마이크 → 로컬 Whisper → 원격 Gateway의 모델 → 로컬 macOS 합성 → 스피커`입니다.
+이 경로의 흐름은 `마이크 → 로컬 Whisper → 원격 Gateway의 모델 → 로컬 음성 합성 → 스피커`입니다.
 원격으로 전달되는 내용은 인식된 대화 텍스트입니다. 음성 합성은 모델 답변이 완성된 뒤 시작합니다.
 
 연결 방식은 [공식 원격 접속 안내](https://docs.openclaw.ai/gateway/remote)와
@@ -69,7 +69,7 @@ openclaw models status
 npm run demo
 ```
 
-macOS, 사용할 모델과 인증이 설정된 OpenClaw CLI, 로컬 Whisper와 macOS 음성 `Yuna`가 필요합니다.
+macOS 또는 Linux에서 OpenClaw CLI와 사용할 모델 인증, [공유 음성 엔진](claude-voice.md#실행)을 준비합니다.
 기존 `setup:claude`로 설치했다면 같은 음성 엔진·모델 파일을 재사용하므로 추가 다운로드가 필요 없습니다.
 `setup:voice`도 동일한 `.huddle-runtime/claude` 경로를 사용하며 Claude 로그인은 요구하지 않습니다.
 설치·Python·언어·음성 설정은 [로컬 음성 안내](claude-voice.md)를 참고합니다.

@@ -5,7 +5,7 @@ import { createLocalSpeechBackend } from "./local-speech.mjs";
 import { immediateReplyInstructions } from "./spoken-reply.mjs";
 
 /** Hermes Agent voice backend over the Hermes API server's Runs API.
- * Speech stays on this Mac; only the recognized text reaches Hermes. Each call
+ * Speech stays on the Huddle host; only the recognized text reaches Hermes. Each call
  * owns one Hermes session, and each utterance is one run that is stopped and
  * confirmed terminal before the next utterance starts. */
 
@@ -64,7 +64,7 @@ function networkFailure(error) {
 }
 
 export function createHermesBackend({cwd=process.cwd(),runtimeRoot=resolve(cwd,".huddle-runtime/claude"),settings,
-  python,model="base",language="ko",voice="Yuna",run,speech,fetch:request=globalThis.fetch,
+  python,model="base",language="ko",voice,run,speech,fetch:request=globalThis.fetch,
   replyTimeoutMs=120000,stopTimeoutMs=15000,pollMs=400}={}) {
   let config, configError;
   try { config = settings?.url || settings?.apiKey ? validateHermesSettings(settings) : undefined; }

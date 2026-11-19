@@ -2,8 +2,11 @@ import { mkdir, access } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runOwned } from "./claude-process.mjs";
+import { inspectLocalTts } from "./local-speech.mjs";
 const root=fileURLToPath(new URL("../",import.meta.url)),runtime=resolve(root,".huddle-runtime/claude");
 const python=join(runtime,"venv/bin/python");
+const tts=await inspectLocalTts({language:process.env.HUDDLE_CLAUDE_LANGUAGE,voice:process.env.HUDDLE_CLAUDE_VOICE});
+console.log(`Local speech synthesis ready (${tts.tts}, ${tts.voice}).`);
 await mkdir(runtime,{recursive:true,mode:0o700});
 try{await access(python);}catch{
   const source=process.env.HUDDLE_PYTHON??"python3";

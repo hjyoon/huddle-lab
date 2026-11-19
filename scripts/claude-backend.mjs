@@ -11,7 +11,7 @@ const claudeVoiceInstructions = [
 ].join(" ");
 
 export function createLocalClaudeBackend({cwd=process.cwd(),runtimeRoot=resolve(cwd,".huddle-runtime/claude"),binary="claude",
-  python=join(runtimeRoot,"venv/bin/python"),model="base",language="ko",voice="Yuna",run=runOwned}={}) {
+  python=join(runtimeRoot,"venv/bin/python"),model="base",language="ko",voice,run=runOwned}={}) {
   const speech=createLocalSpeechBackend({cwd,runtimeRoot,python,model,language,voice,run});
   /** `claude auth status` prints its JSON and exits 1 when signed out. */
   async function signedIn(){

@@ -2,9 +2,9 @@
 
 `npm run demo`의 `http://127.0.0.1:4184/`에서 **대화할 AI → Hermes**를 선택합니다.
 [Hermes Agent](https://github.com/NousResearch/hermes-agent)의 API 서버에 연결해, Hermes가 가진 모델·메모리·도구로 대화합니다.
-음성 인식과 합성은 Claude/OpenClaw와 같은 로컬 엔진(Whisper, macOS `say`)을 사용하고, Hermes로는 인식된 텍스트만 전송합니다.
+음성 인식과 합성은 Claude/OpenClaw와 같은 [로컬 음성 엔진](claude-voice.md#실행)을 사용하고, Hermes로는 인식된 텍스트만 전송합니다.
 
-흐름: `마이크 → 로컬 Whisper → Hermes API 서버(/v1/runs) → 로컬 macOS 합성 → 스피커`
+오디오는 `마이크 → 로컬 Whisper → Hermes API 서버(/v1/runs) → 로컬 음성 합성 → 스피커`를 거칩니다.
 
 ## Hermes 쪽 준비
 
@@ -18,7 +18,7 @@ API_SERVER_KEY=<충분히 긴 임의 문자열>
 게이트웨이를 재시작하면 `http://127.0.0.1:8642`에서 대기합니다. 자세한 내용은
 [Hermes API Server 문서](https://hermes-agent.nousresearch.com/docs/user-guide/features/api-server)를 참고합니다.
 
-API 서버는 공개 인터넷에 열지 않는 것을 권장합니다. Mac에서 SSH 터널로 연결합니다.
+API 서버는 공개 인터넷에 열지 않는 것을 권장합니다. Huddle 호스트에서 SSH 터널로 연결합니다.
 
 ```sh
 ssh -N -L 8642:127.0.0.1:8642 <hermes-host>
@@ -63,4 +63,4 @@ HUDDLE_HERMES_URL=http://127.0.0.1:8642 HUDDLE_HERMES_KEY=<API_SERVER_KEY> npm r
 - `tests/hermes-backend.test.mjs`: 가짜 Runs API로 설정 검증, 준비 상태, 세션·실행 단위, 끼어들기 중단과 종료 확인,
   제출 중 끼어들기, 중단 미확인 시 차단, 멱등 재전송, 승인 대기 중단, 오류 문장 정리, Markdown 제거를 검사합니다.
 - `tests/ai-host.test.mjs`: 선택 화면 목록과 Hermes 전용 음성 경로 라우팅을 검사합니다.
-- 실제 Hermes API 서버와 Mac 음성 엔진을 연결한 통화, 브라우저(Playwright) 테스트는 아직 수행하지 않았습니다.
+- 실제 Hermes API 서버를 연결한 음성 통화는 별도로 검증해야 합니다.

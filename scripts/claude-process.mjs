@@ -4,7 +4,11 @@ import { spawn } from "node:child_process";
 export async function runOwned(binary, args, { cwd, signal, input = "", timeoutMs = 60000, onLine, maxBytes = 1024 * 1024, env, captureFailureOutput = false } = {}) {
   signal?.throwIfAborted();
   return new Promise((resolve, reject) => {
-    const child = spawn(binary, args, { cwd, env, shell:false, detached:process.platform !== "win32", stdio:["pipe","pipe","pipe"] });
+    const child = spawn(binary, args, {
+      cwd, env, shell:false, detached:process.platform !== "win32",
+      // Commands without input get EOF without a write racing their exit.
+      stdio:[input?.length ? "pipe" : "ignore","pipe","pipe"],
+    });
     let output = "", line = "", stderr = "", failure, killTimer;
     const kill = (kind) => { try { if (process.platform !== "win32" && child.pid) process.kill(-child.pid,kind); else child.kill(kind); } catch {} };
     const stop = (error) => {
@@ -37,9 +41,9 @@ export async function runOwned(binary, args, { cwd, signal, input = "", timeoutM
       try { while((newline=line.indexOf("\n"))>=0){const value=line.slice(0,newline);line=line.slice(newline+1);if(value.trim())onLine?.(value);} }
       catch(error){stop(error);}
     });
-    child.stdin.on("error",()=>{if(!failure)stop(new Error(`${binary} input connection closed.`));});
+    child.stdin?.on("error",()=>{if(!failure)stop(new Error(`${binary} input connection closed.`));});
     signal?.addEventListener("abort",abort,{once:true});
-    child.stdin.end(input);
+    child.stdin?.end(input);
     if(signal?.aborted)abort();
   });
 }

@@ -47,13 +47,13 @@ function gatewayFailure(cliError, response, method) {
   const upgradeStatus=diagnostic.match(/(?:rejected websocket upgrade \(HTTP |unexpected server response:\s*)([45]\d{2})\b/i)?.[1];
   if(upgradeStatus&&["502","503","504"].includes(upgradeStatus))
     return new GatewayError(`원격 Gateway가 HTTP ${upgradeStatus}를 반환했습니다. 운영 Gateway가 준비된 뒤 연결을 다시 확인해 주세요.`,rejected);
-  if(cliError?.code==="ENOENT")return new GatewayError("이 Mac에서 OpenClaw CLI를 찾을 수 없습니다. Huddle 서버의 OpenClaw 실행 경로를 확인해 주세요.",rejected);
+  if(cliError?.code==="ENOENT")return new GatewayError("Huddle 호스트에서 OpenClaw CLI를 찾을 수 없습니다. OpenClaw 실행 경로를 확인해 주세요.",rejected);
   if(/AUTH_RATE_LIMITED|too many (?:failed )?(?:authentication|auth) attempts|rate limit.*auth/i.test(diagnostic))
     return new GatewayError("Gateway가 인증 시도를 일시 제한했습니다. 잠시 기다린 뒤 올바른 토큰 또는 비밀번호를 적용해 주세요.",rejected);
   if(/NOT_PAIRED|PAIRING_REQUIRED|pairing required|device identity required|DEVICE_IDENTITY_REQUIRED|device token mismatch|AUTH_DEVICE_TOKEN_MISMATCH/i.test(diagnostic))
     return new GatewayError(method==="health"
-      ? "원격 Gateway의 기기 승인이 필요합니다. 원격 OpenClaw의 Devices에서 이 Mac의 요청을 승인한 뒤 다시 확인해 주세요."
-      : "이 Mac에 원격 실행 권한(operator.write) 승인이 필요합니다. 운영 OpenClaw의 Devices에서 해당 권한 요청을 승인한 뒤 다시 확인해 주세요.",rejected);
+      ? "원격 Gateway의 기기 승인이 필요합니다. 원격 OpenClaw의 Devices에서 Huddle 호스트의 요청을 승인한 뒤 다시 확인해 주세요."
+      : "Huddle 호스트에 원격 실행 권한(operator.write) 승인이 필요합니다. 운영 OpenClaw의 Devices에서 해당 권한 요청을 승인한 뒤 다시 확인해 주세요.",rejected);
   if(/missing scope|INSUFFICIENT_SCOPE|forbidden scope|AUTH_SCOPE_MISMATCH|scope upgrade/i.test(diagnostic))
     return new GatewayError(method==="health"
       ? "이 기기에 Gateway 조회 권한(operator.read)이 없습니다. 운영 OpenClaw에서 기기 권한을 확인해 주세요."
@@ -98,7 +98,7 @@ export function validateRemoteSettings(value) {
 
 /** The CLI handles Gateway pairing. Each voice call owns one Gateway session. */
 export function createRemoteOpenClawBackend({cwd=process.cwd(),runtimeRoot=resolve(cwd,".huddle-runtime/claude"),
-  binary="openclaw",remote,python,model="base",language="ko",voice="Yuna",run=runOwned}={}) {
+  binary="openclaw",remote,python,model="base",language="ko",voice,run=runOwned}={}) {
   const settings=remote?.url?validateRemoteSettings(remote):undefined;
   const speech=createLocalSpeechBackend({cwd,runtimeRoot,...(python?{python}:{}),model,language,voice,run});
   let selectedAgent,blocked;

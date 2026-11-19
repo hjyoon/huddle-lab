@@ -1,13 +1,14 @@
 # 로컬 Claude Code 음성 Huddle
 
-Claude Code를 응답 엔진으로 사용하고, 로컬 Whisper와 macOS `say`를 연결하는 제공자입니다.
+Claude Code를 응답 엔진으로 사용하고, 로컬 Whisper와 운영체제별 로컬 음성 합성기를 연결합니다.
 기존 `createAgentHuddle`의 UI·음소거·응답 재생·통화 수명을 재사용합니다.
 현재 데모는 음성 대화용이며 Claude의 파일·셸·MCP 도구 실행은 켜지 않습니다.
 
 ## 실행
 
-macOS, Node.js 20.19 이상, Python 3.10–3.13(3.12 권장), Claude Code와 로그인 계정이 필요합니다.
-macOS 한국어 음성 `Yuna`와 `afconvert`를 사용합니다. 지원 브라우저는 검증에 사용한 Chrome입니다.
+macOS 또는 Linux에서 Node.js 20.19 이상, Python 3.10–3.13(3.12 권장), Claude Code를 준비합니다.
+macOS는 한국어 음성 `Yuna`와 `afconvert`, Linux는 eSpeak NG와 FFmpeg를 사용합니다.
+[공유 음성 엔진 설치](../README.md#로컬-음성-엔진-설치)를 먼저 참고합니다.
 
 ```sh
 npm ci
@@ -42,7 +43,8 @@ PyAV 19에서는 이 faster-whisper 버전이 사용하는 `metadata_errors` 인
 - `HUDDLE_CLAUDE_PYTHON=/absolute/python`: 설치한 faster-whisper 런타임 경로.
 - `HUDDLE_CLAUDE_ASR_MODEL=small`: 로컬 인식 모델 변경. 같은 값으로 `setup:claude`를 먼저 실행합니다.
 - `HUDDLE_CLAUDE_LANGUAGE=en` 또는 `auto`: 인식 언어 변경. 기본은 `ko`.
-- `HUDDLE_CLAUDE_VOICE=Samantha`: 합성 음성 변경. 기본은 `Yuna`이며 `say -v '?'`로 설치 음성을 확인합니다.
+- `HUDDLE_CLAUDE_VOICE`: 합성 음성 변경. macOS 기본값은 `Yuna`이며 `say -v '?'`로 설치 음성을 확인합니다.
+  Linux는 인식 언어의 음성을 기본으로 사용합니다. 인식 언어가 `auto`면 `ko`를 사용하며, `espeak-ng --voices`로 설치 음성을 확인합니다.
 
 음성 인식·합성에는 외부 음성 API 키를 사용하지 않습니다. 인식된 대화 텍스트는 Claude Code의
 기존 인증·모델 설정에 따라 Claude 서비스로 전송합니다. 발화 단위 임시 WAV와 합성 파일은
@@ -93,7 +95,7 @@ assistant 응답만 다음 대화 문맥에 넣으며 중단된 응답의 이미
 
 ## 범위와 검증
 
-발화 종료 → Whisper → Claude 텍스트 응답 완료 → `say` 합성 → PCM 재생의 순차 경로입니다.
+발화 종료 → Whisper → Claude 텍스트 응답 완료 → 로컬 합성 → PCM 재생의 순차 경로입니다.
 토큰 단위 음성 스트리밍은 구현하지 않았습니다. Claude 응답은 최대 1,200자, 합성 출력은 최대 60초로 제한합니다.
 단순 에너지 감지는 잡음·스피커 에코에 강한 신경망 VAD가 아니므로 물리 장치에서 추가 확인이 필요합니다.
 

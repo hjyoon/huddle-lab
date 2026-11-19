@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 import { createSpeechGate } from "../dist/claude-voice/vad.js";
 import { encodeWav,decodeWav,createLocalClaudeBackend } from "../scripts/claude-backend.mjs";
 import { runOwned } from "../scripts/claude-process.mjs";
+import { createLocalSpeechBackend } from "../scripts/local-speech.mjs";
 const silence=new Array(960).fill(0),speech=new Array(960).fill(.1);
 
 test("speech gate retains onset, rejects clicks, finalizes pauses and can restart after reset",()=>{
@@ -25,6 +29,33 @@ test("PCM WAV roundtrip preserves samples and rejects malformed audio",()=>{
  assert.equal(back.length,samples.length);back.forEach((n,i)=>assert.ok(Math.abs(n-samples[i])<.0001));
  assert.throws(()=>decodeWav(wav.subarray(0,48)),/Truncated/);
  const invalid=Buffer.from(wav);invalid.writeUInt32LE(24000,24);assert.throws(()=>decodeWav(invalid),/48 kHz/);
+});
+test("local speech uses the host's Korean voice and normalizes it to PCM",async(t)=>{
+ const directory=await mkdtemp(join(tmpdir(),"huddle-speech-test-"));
+ t.after(()=>rm(directory,{recursive:true,force:true}));
+ const linux=process.platform==="linux",synthesizer=linux?"espeak-ng":"say",converter=linux?"ffmpeg":"afconvert";
+ const voice=linux?"ko":"Yuna",text="안녕하세요.";
+ const signal=new AbortController().signal;
+ const calls=[];
+ const backend=createLocalSpeechBackend({runtimeRoot:directory,run:async(binary,args,options)=>{
+  calls.push(binary);
+  if(binary===synthesizer&&args.includes("-f")){
+   assert.equal(args[args.indexOf("-v")+1],voice);
+   assert.equal(await readFile(args[args.indexOf("-f")+1],"utf8"),text);
+   assert.equal(options.signal,signal);
+  }
+  if(binary===converter&&!args.includes("-version")){
+   assert.equal(options.signal,signal);
+   await writeFile(linux?args.at(-1):args[1],encodeWav([.25]));
+  }
+  return binary==="say"?"Yuna ko_KR":"";
+ }});
+ const status=await backend.inspectSpeech();
+ assert.equal(status.voice,voice);
+ assert.equal(status.tts,linux?"eSpeak NG":"macOS say");
+ assert.equal((await backend.synthesize(text,signal))[0],.25);
+ assert.deepEqual(calls.slice(-2),[synthesizer,converter]);
+ assert.deepEqual(await readdir(directory),[]);
 });
 test("Claude CLI parser uses completed result, passes history on stdin and disables tools",async()=>{
  let captured;

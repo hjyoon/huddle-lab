@@ -6,7 +6,7 @@ Buzz 1.0.4에서 분리한 **사용자 ↔ AI 음성 대화 연결 코어**입�
 
 ## 실행
 
-Node.js 20.19 이상과 사용할 AI의 설치·로그인이 필요합니다. 저장소 루트에서 실행합니다.
+macOS 또는 Linux에서 실행할 수 있습니다. Node.js 20.19 이상과 사용할 AI의 인증을 준비한 뒤 저장소 루트에서 실행합니다.
 
 ```sh
 npm ci
@@ -19,14 +19,14 @@ npm run demo
 OpenClaw는 **로컬 모델 / Gateway (MCP)**를 선택할 수 있습니다. Gateway 모드에서는 화면에 Gateway 주소,
 토큰 또는 비밀번호, 에이전트 ID(선택)를 입력하고 **저장 · 연결 확인**을 누릅니다.
 Gateway의 전용 에이전트에 허용된 MCP 도구를 통화에서 사용할 수 있습니다.
-인증 정보는 이 Mac에 저장되어 서버를 재시작해도 사용할 수 있습니다. 지우려면 **저장된 인증 삭제**를 누릅니다.
+인증 정보는 Huddle 호스트에 저장되어 서버를 재시작해도 사용할 수 있습니다. 지우려면 **저장된 인증 삭제**를 누릅니다.
 
 | AI | 연결 방식 | 준비 |
 | --- | --- | --- |
 | Codex | 로컬 Codex의 실시간 WebRTC 음성 | Codex CLI와 기존 로그인 |
-| Claude | 로컬 Whisper → Claude Code → macOS 음성 합성 | `npm run setup:voice`, Claude 로그인, macOS |
-| OpenClaw | 로컬 Whisper → 로컬 CLI 또는 원격 Gateway의 모델 → macOS 음성 합성 | `npm run setup:voice`, OpenClaw CLI, 모델 인증 또는 원격 Gateway 인증, macOS |
-| Hermes | 로컬 Whisper → Hermes API 서버(Runs API) → macOS 음성 합성 | `npm run setup:voice`, Hermes API 서버 주소·키(`HUDDLE_HERMES_URL`, `HUDDLE_HERMES_KEY`), macOS |
+| Claude | 로컬 Whisper → Claude Code → 로컬 음성 합성 | 음성 엔진, Claude Code 로그인 |
+| OpenClaw | 로컬 Whisper → 로컬 CLI 또는 Gateway의 모델 → 로컬 음성 합성 | 음성 엔진, OpenClaw CLI, 모델 또는 Gateway 인증 |
+| Hermes | 로컬 Whisper → Hermes API 서버(Runs API) → 로컬 음성 합성 | 음성 엔진, Hermes API 서버 주소·키(`HUDDLE_HERMES_URL`, `HUDDLE_HERMES_KEY`) |
 
 [Codex 연결 안내](docs/codex-voice.md), [Claude 연결 안내](docs/claude-voice.md), [OpenClaw 연결 안내](docs/openclaw-voice.md), [Hermes 연결 안내](docs/hermes-voice.md)에 설정과 검증 범위를 정리했습니다.
 현재 환경의 Claude 실제 모델 응답은 인증 갱신 후 확인해야 하며, 구현·자동 검증과 로컬 음성 엔진 검증을 완료했습니다.
@@ -34,11 +34,25 @@ Gateway의 전용 에이전트에 허용된 MCP 도구를 통화에서 사용할
 각 제공자의 독립 화면은 `npm run demo:codex`(4182), `npm run demo:claude`(4183)로 실행합니다.
 모델 없는 연결 테스트는 `npm run demo:agent`(4181)입니다. 통합 화면 포트는 `PORT=4194 npm run demo`로 바꿉니다.
 
-WireGuard를 사용하는 Mac에서는 `.huddle-runtime/wireguard/address`에 터널의 IPv4 주소를 지정할 수 있습니다.
+WireGuard를 사용하는 호스트에서는 `.huddle-runtime/wireguard/address`에 터널의 IPv4 주소를 지정할 수 있습니다.
+macOS의 `utunN`, Linux의 `wg0` 같은 `wgN` 인터페이스를 찾습니다.
 같은 폴더의 `server-cert.pem`과 `server-key.pem`으로 그 주소의 HTTPS 수신기를 시작합니다.
 인증서의 SAN에 터널 IP를 넣고, 다른 기기의 브라우저가 발급 CA를 신뢰하도록 설정한 뒤 `https://<WireGuard IP>:4184/`를 엽니다.
 브라우저 음성 연결도 같은 주소를 사용합니다.
-저장된 OpenClaw 인증은 이 Mac의 `http://127.0.0.1:4184/`에서 관리합니다.
+저장된 OpenClaw 인증은 Huddle 호스트의 `http://127.0.0.1:4184/`에서 관리합니다.
+
+### 로컬 음성 엔진 설치
+
+Python 3.10–3.13이 필요합니다. macOS는 `say`와 한국어 음성 `Yuna`를 사용합니다.
+Linux는 eSpeak NG와 FFmpeg로 음성을 합성합니다. Debian·Ubuntu에서 설치하려면 다음을 실행합니다.
+
+```sh
+sudo apt install python3 python3-venv espeak-ng ffmpeg
+```
+
+두 운영체제 모두 `npm run setup:voice`로 Whisper를 준비합니다.
+Linux의 기본 합성 음성은 인식 언어와 같으며 기본값은 `ko`입니다.
+합성 음성은 `HUDDLE_CLAUDE_VOICE`로 지정할 수 있습니다.
 
 ## 실제 AI 제공자 연결 지점
 

@@ -45,7 +45,7 @@ export async function createAiHost({port=4184,cwd=process.cwd(),codex={},claude=
     const requestUrl=new URL(req.url,origin),path=requestUrl.pathname;
     const json=(status,value)=>res.writeHead(status,{"Content-Type":"application/json","Cache-Control":"no-store","X-Content-Type-Options":"nosniff","Cross-Origin-Resource-Policy":"same-origin"}).end(JSON.stringify(value));
     if(path==="/api/providers/openclaw/remote/reveal"){
-      if(vpn){json(403,{error:"저장된 인증은 이 Mac의 로컬 Huddle에서 확인할 수 있습니다."});return;}
+      if(vpn){json(403,{error:"저장된 인증은 Huddle 호스트의 로컬 화면에서 확인할 수 있습니다."});return;}
       if(req.method!=="POST"){json(405,{error:"Method not allowed."});return;}
       if(req.headers.origin!==url||req.headers["content-type"]!=="application/json"){
         json(403,{error:"Same-origin settings request required."});return;
@@ -59,7 +59,7 @@ export async function createAiHost({port=4184,cwd=process.cwd(),codex={},claude=
       if(req.method==="GET"){
         json(200,{url:remoteSettings?.url??"",agent:remoteSettings?.agent??"",configured:!!remoteSettings,hasCredentials:!!(remoteSettings?.token||remoteSettings?.password),authType:remoteSettings?remoteSettings.token?"token":"password":null,...(storageError?{storageError}:{})});return;
       }
-      if(vpn){json(403,{error:"저장된 인증은 이 Mac의 로컬 Huddle에서 변경할 수 있습니다."});return;}
+      if(vpn){json(403,{error:"저장된 인증은 Huddle 호스트의 로컬 화면에서 변경할 수 있습니다."});return;}
       if(!["POST","DELETE"].includes(req.method)){json(405,{error:"Method not allowed."});return;}
       if(req.headers.origin!==url||(req.method==="POST"&&req.headers["content-type"]!=="application/json")){json(403,{error:"Same-origin settings request required."});return;}
       if(configuring||remoteHost?.busy){json(409,{error:"통화 종료 후 원격 설정을 변경해 주세요."});return;}
@@ -90,7 +90,7 @@ export async function createAiHost({port=4184,cwd=process.cwd(),codex={},claude=
       return;
     }
     if(path==="/api/providers/claude/login"){
-      if(vpn){json(403,{error:"Claude 로그인은 이 Mac의 로컬 Huddle에서 할 수 있습니다."});return;}
+      if(vpn){json(403,{error:"Claude 로그인은 Huddle 호스트의 로컬 화면에서 할 수 있습니다."});return;}
       if(req.method!=="POST"){json(405,{error:"Method not allowed."});return;}
       if(req.headers.origin!==url||req.headers["content-type"]!=="application/json"){json(403,{error:"Same-origin login request required."});return;}
       const entry=providers.get("claude");

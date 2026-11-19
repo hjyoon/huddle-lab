@@ -6,7 +6,7 @@ import { completeSpokenReply, toolFreeSpokenReplyInstructions } from "./spoken-r
 /** OpenClaw's tool-free local model transport. No agent sessions, chat
  * channels, delivery flags, or changes to the operator's config are used. */
 export function createLocalOpenClawBackend({cwd=process.cwd(),runtimeRoot=resolve(cwd,".huddle-runtime/claude"),
-  binary="openclaw",agent,modelRef,python,model="base",language="ko",voice="Yuna",run=runOwned}={}) {
+  binary="openclaw",agent,modelRef,python,model="base",language="ko",voice,run=runOwned}={}) {
   for(const value of [agent,modelRef])if(value!==undefined&&(typeof value!=="string"||!value.trim()||value.startsWith("-")))throw new Error("Invalid OpenClaw agent/model selection.");
   const speech=createLocalSpeechBackend({cwd,runtimeRoot,...(python?{python}:{}),model,language,voice,run});
   let capabilities;
