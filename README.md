@@ -37,7 +37,7 @@ Gateway의 전용 에이전트에 허용된 MCP 도구를 통화에서 사용할
 모델 없는 연결 테스트는 `npm run demo:agent`(4181)입니다. 통합 화면 포트는 `PORT=4194 npm run demo`로 바꿉니다.
 
 WireGuard를 사용하는 호스트에서는 `.huddle-runtime/wireguard/address`에 터널의 IPv4 주소를 지정할 수 있습니다.
-macOS의 `utunN`, Linux의 `wg0` 같은 `wgN` 인터페이스를 찾습니다.
+macOS의 `utunN`과 Linux의 `wgN` 인터페이스를 찾습니다. Linux에서는 `ip` 명령으로 이름을 따로 지정한 WireGuard 인터페이스도 찾습니다.
 같은 폴더의 `server-cert.pem`과 `server-key.pem`으로 그 주소의 HTTPS 수신기를 시작합니다.
 인증서의 SAN에 터널 IP를 넣고, 다른 기기의 브라우저가 발급 CA를 신뢰하도록 설정한 뒤 `https://<WireGuard IP>:4184/`를 엽니다.
 브라우저 음성 연결도 같은 주소를 사용합니다.
