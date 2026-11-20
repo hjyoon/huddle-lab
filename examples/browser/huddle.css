@@ -479,15 +479,42 @@ button:disabled { cursor: default; }
   padding: clamp(24px, 6vh, 66px) 0 0;
   gap: 7px;
 }
-.direct-call .call-orb { width: 106px; height: 106px; border-radius: 36px; margin-bottom: 7px; }
-.direct-call .call-orb::before { inset: 6px; border-radius: 30px; }
+.direct-call .call-orb { width: 106px; height: 106px; margin-bottom: 7px; }
+.direct-call .call-orb::before { inset: 6px; }
 .direct-call .call-wave {
   width: 83px;
   height: 83px;
-  border-radius: 25px;
   background: #29554b;
 }
 .direct-call .call-wave i { width: 3px; height: calc(var(--bar) * .71); }
+.direct-call .call[data-phase="connected"][data-activity="listening"][data-muted="false"] .call-wave i,
+.direct-call .call[data-phase="connected"][data-activity="thinking"] .call-wave i {
+  animation: wave-soft 1.15s ease-in-out var(--delay) infinite alternate;
+}
+@keyframes wave-soft {
+  from { transform: scaleY(.65); }
+  to { transform: scaleY(1); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .direct-call .call[data-phase="connected"]:where(
+    [data-activity="listening"][data-muted="false"], [data-activity="thinking"], [data-activity="speaking"]
+  ) .call-orb::after {
+    position: absolute;
+    inset: 0;
+    border: 1px solid #7cddc5;
+    border-radius: inherit;
+    pointer-events: none;
+    content: "";
+    animation: orb-ripple 2.3s ease-out infinite;
+  }
+  .direct-call .call[data-phase="connected"][data-activity="speaking"] .call-orb::after {
+    animation-duration: 1.84s;
+  }
+}
+@keyframes orb-ripple {
+  from { transform: scale(1); opacity: .44; }
+  to { transform: scale(1.24); opacity: 0; }
+}
 .direct-call #call-title { max-width: 100%; overflow-wrap: anywhere; font-size: clamp(1.6rem, 6vw, 2.15rem); letter-spacing: -.04em; }
 .direct-call #activity { display: none; }
 .direct-call .call-top {
@@ -608,8 +635,7 @@ button:disabled { cursor: default; }
 }
 @media (max-height: 560px) {
   .direct-call .call-center { padding-top: 14px; }
-  .direct-call .call-orb { width: 80px; height: 80px; border-radius: 28px; }
-  .direct-call .call-orb::before { border-radius: 22px; }
-  .direct-call .call-wave { width: 63px; height: 63px; border-radius: 18px; }
+  .direct-call .call-orb { width: 80px; height: 80px; }
+  .direct-call .call-wave { width: 63px; height: 63px; }
   .direct-call .call-top { margin-top: 10px; }
 }
