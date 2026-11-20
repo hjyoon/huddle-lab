@@ -104,9 +104,22 @@ test('the OpenClaw route joins automatically while the root still waits for the 
  await page.waitForFunction(()=>!document.getElementById('start').disabled);
  assert.equal(await page.locator('#status').textContent(),'대기 중');
  assert.equal(await page.locator('#provider').inputValue(),'codex');
+ await page.locator('#provider').selectOption('openclaw');
+ await page.getByLabel('통화 표시 이름').fill('도우미');
+ await page.addInitScript(()=>{
+  if(location.pathname!=='/openclaw')return;
+  const capture=navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+  navigator.mediaDevices.getUserMedia=async(...args)=>{
+   await new Promise(resolve=>{window.continueCapture=resolve;});
+   return capture(...args);
+  };
+ });
  await page.goto(direct.url+'/openclaw');
+ await page.waitForFunction(()=>typeof window.continueCapture==='function');
+ assert.equal(await page.locator('#status').textContent(),'연결 중');
+ await page.evaluate(()=>window.continueCapture());
  await page.waitForFunction(()=>document.getElementById('status').textContent==='통화 중');
- assert.equal(await page.locator('#call-title').textContent(),'OpenClaw');
+ assert.equal(await page.locator('#call-title').textContent(),'도우미');
  assert.ok(await page.locator('#settings').isHidden());
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth),390);
  await page.getByRole('button',{name:'오디오',exact:true}).click();

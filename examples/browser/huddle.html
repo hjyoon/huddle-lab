@@ -83,6 +83,11 @@
               <option value="remote-realtime">Gateway (실시간 음성)</option>
             </select>
           </div>
+          <div id="openclaw-name-field" class="field" hidden>
+            <label for="openclaw-call-name">통화 표시 이름</label>
+            <input id="openclaw-call-name" placeholder="OpenClaw" maxlength="32" aria-describedby="openclaw-name-storage">
+            <small id="openclaw-name-storage">이 브라우저에 저장됩니다.</small>
+          </div>
         </div>
         <p id="setup" class="setup-status" role="status">설치 및 연결 상태 확인 중…</p>
         <p id="login-row" hidden><button class="field-button" id="login" type="button">브라우저에서 Claude 로그인</button></p>

@@ -8,6 +8,7 @@ const element=id=>document.getElementById(id);
 const names={codex:"Codex",claude:"Claude",openclaw:"OpenClaw",hermes:"Hermes"};
 const vpnAccess=location.protocol==="https:";
 const directCall=document.documentElement.classList.contains("direct-call");
+const callNameKey="huddle-openclaw-call-name";
 let huddle,off,ready=false,selected="codex",generation=0,checking,remoteMode="local",configuring=false;
 let savedRemote=false,remoteStorageError=false;
 let savedUrl,savedAuthType,usingSavedSecret=false,revealing,canLogin=false,loggingIn=false;
@@ -17,6 +18,8 @@ let checked=false,resumeAudio,speakerMuted=false,clearOutput;
 const secretInput=element("remote-secret");
 const authTypeInput=element("remote-auth-type");
 const remoteUrlInput=element("remote-url");
+const callNameInput=element("openclaw-call-name");
+try{callNameInput.value=(localStorage.getItem(callNameKey)??"").slice(0,callNameInput.maxLength);}catch{}
 function canReuseSecret(){
  if(!usingSavedSecret||!savedRemote||authTypeInput.value!==savedAuthType)return false;
  try{return new URL(remoteUrlInput.value.trim()).href===savedUrl;}catch{return false;}
@@ -92,9 +95,11 @@ const render=()=>{
  call.dataset.phase=phase;call.dataset.activity=activity;call.dataset.muted=String(state?.muted??false);
  element("settings").dataset.ready=String(ready);
  updateClock(phase);
- setText("call-title",names[selected]);
+ setText("call-title",(directCall&&callNameInput.value.trim())||names[selected]);
  element("provider").disabled=!["idle","error"].includes(phase);
  element("openclaw-choice").hidden=selected!=="openclaw";
+ element("openclaw-name-field").hidden=selected!=="openclaw";
+ callNameInput.disabled=configuring||active;
  element("remote-settings").hidden=selected!=="openclaw"||remoteMode==="local";
  element("openclaw-mode").disabled=configuring||!["idle","error"].includes(phase);
  element("remote-fields").disabled=configuring||!["idle","error"].includes(phase);
@@ -125,7 +130,8 @@ const render=()=>{
  if(focusMoved&&!element("stop").disabled)element("stop").focus({preventScroll:true});
  setText("mute-label",state?.muted?"마이크 음소거 해제":"마이크 음소거");
  element("mute").setAttribute("aria-pressed",String(state?.muted??false));
- setText("status",({idle:directCall&&!checked?"Gateway 확인 중":"대기 중",connecting:resumeAudio?"오디오 시작 대기":`${names[selected]} 연결 중`,connected:"통화 중",leaving:"종료 중",error:"연결 실패"})[phase]);
+ const connecting=resumeAudio?"오디오 시작 대기":directCall?"연결 중":`${names[selected]} 연결 중`;
+ setText("status",({idle:directCall&&!checked?"Gateway 확인 중":"대기 중",connecting,connected:"통화 중",leaving:"종료 중",error:"연결 실패"})[phase]);
  setText("activity",state?.muted&&activity==="listening"?"마이크 음소거":({idle:"",listening:"듣는 중",thinking:"답변 준비 중",speaking:"말하는 중"})[activity]);
  const error=state?.error??(directCall&&checked&&!ready?element("setup").textContent:"");
  setText("error",directCall&&/permission denied|not allowed by the user agent/i.test(error)
@@ -192,6 +198,9 @@ async function choose(id){
  if(token===generation){checked=true;render();}
 }
 element("provider").onchange=()=>{void choose(element("provider").value);};
+callNameInput.addEventListener("input",()=>{
+ try{localStorage.setItem(callNameKey,callNameInput.value.trim());}catch{}
+});
 element("openclaw-mode").onchange=()=>{
  if(!idle()||configuring){element("openclaw-mode").value=remoteMode;return;}
  remoteMode=element("openclaw-mode").value;

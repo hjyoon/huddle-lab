@@ -503,7 +503,7 @@ button:disabled { cursor: default; }
   background: #29554b;
 }
 .direct-call .call-wave i { width: 3px; height: calc(var(--bar) * .71); }
-.direct-call #call-title { font-size: clamp(1.6rem, 6vw, 2.15rem); letter-spacing: -.04em; }
+.direct-call #call-title { max-width: 100%; overflow-wrap: anywhere; font-size: clamp(1.6rem, 6vw, 2.15rem); letter-spacing: -.04em; }
 .direct-call #activity { font-size: .83rem; color: #c9ded7; }
 .direct-call .call-top {
   grid-row: 3;
