@@ -94,8 +94,10 @@ test('the mobile call surface shows the live timer, accessible controls and the 
 });
 
 test('the OpenClaw route waits for a tap and only shows elapsed time during a call',{timeout:20000},async t=>{
- const direct=await createAiHost({port:0,...providerFixtures(),openclawRemote:{
-  remote:{url:'wss://gateway.example/',token:'fixture-token'},backend:fixtures.openclaw.backend,
+ const callFixtures=providerFixtures();
+ callFixtures.openclaw.backend.reply=async()=>('이전 대화는 스크롤해서 읽을 수 있습니다. 다음 발화는 이어서 아래에 표시됩니다. ').repeat(16);
+ const direct=await createAiHost({port:0,...callFixtures,openclawRemote:{
+  remote:{url:'wss://gateway.example/',token:'fixture-token'},backend:callFixtures.openclaw.backend,
  }});
  t.after(()=>direct.close());
  const page=await pageFor(t);
@@ -148,8 +150,9 @@ test('the OpenClaw route waits for a tap and only shows elapsed time during a ca
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth),390);
  await page.getByRole('button',{name:'오디오',exact:true}).click();
  assert.equal(await page.locator('#speaker').getAttribute('aria-pressed'),'true');
- await page.getByRole('button',{name:'대화 기록',exact:true}).click();
- assert.ok(await page.locator('#conversation').isVisible());
+ const conversation=page.locator('#call .call-top + #conversation');
+ assert.ok(await conversation.isVisible());
+ assert.equal(await conversation.evaluate(node=>getComputedStyle(node).backgroundColor),'rgba(0, 0, 0, 0)');
  await page.evaluate(()=>{
   const {context,gain}=window.voiceFixture,start=context.currentTime+.04;
   gain.gain.setValueAtTime(.2,start);
@@ -158,6 +161,20 @@ test('the OpenClaw route waits for a tap and only shows elapsed time during a ca
  const assistant=page.locator('#transcripts [data-speaker="assistant"] .message-speaker');
  await assistant.waitFor({state:'visible'});
  assert.equal(await assistant.textContent(),'도우미');
+ const scroll=page.locator('#transcript-scroll');
+ await page.waitForFunction(()=>{
+  const list=document.getElementById('transcript-scroll');
+  return list.scrollTop>0&&list.hasAttribute('data-fade-top');
+ });
+ assert.match(await scroll.evaluate(node=>getComputedStyle(node).maskImage),/linear-gradient/);
+ await scroll.hover();
+ await page.mouse.wheel(0,-2000);
+ await page.waitForFunction(()=>{
+  const list=document.getElementById('transcript-scroll');
+  return list.scrollTop===0&&!list.hasAttribute('data-fade-top');
+ });
+ await page.mouse.wheel(0,2000);
+ await page.waitForFunction(()=>document.getElementById('transcript-scroll').hasAttribute('data-fade-top'));
  const hangup=await page.locator('#stop .control-icon').boundingBox();
  await page.locator('#stop').click();
  await page.waitForFunction(()=>document.getElementById('status').textContent==='대기 중');

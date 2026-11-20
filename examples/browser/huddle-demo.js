@@ -335,12 +335,6 @@ element("speaker").onclick=()=>{
  speakerMuted=!speakerMuted;if(speakerMuted)clearOutput?.();
  render();
 };
-element("toggle-transcript").onclick=()=>{
- const toggle=element("toggle-transcript");
- const open=toggle.getAttribute("aria-expanded")!=="true";
- toggle.setAttribute("aria-expanded",String(open));
- element("call-layout").dataset.transcriptOpen=String(open);
-};
 element("mute").onclick=()=>huddle?.mute();
 element("interrupt").onclick=()=>{void huddle?.interrupt();};
 element("stop").onclick=async()=>{
@@ -357,6 +351,9 @@ if(directCall||new URLSearchParams(location.search).get("openclaw")==="remote"){
 if(directCall){
  element("call-actions").append(element("mute"));
  element("call-title").after(element("call-duration"));
+ element("status").closest(".call-top").after(element("conversation"));
+ const scroll=element("transcript-scroll");
+ scroll.addEventListener("scroll",()=>{scroll.toggleAttribute("data-fade-top",scroll.scrollTop>2);},{passive:true});
  animateCallBackdrop();
 }
 void choose(selected);
