@@ -116,7 +116,7 @@ const render=()=>{
  start.disabled=(!ready&&!(directCall&&checked))||active;start.hidden=active;
  element("resume-audio").hidden=!active||!resumeAudio;
  element("call-actions").hidden=!active;
- setText("start",directCall&&checked&&(!ready||phase==="error")?"다시 연결":`${names[selected]}와 통화 시작`);
+ setText("start-label",directCall?"통화":`${names[selected]}와 통화 시작`);
  element("speaker").disabled=!connected;
  element("speaker").setAttribute("aria-pressed",String(speakerMuted));
  setText("speaker-label",speakerMuted?"오디오 켜기":"오디오");

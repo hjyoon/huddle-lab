@@ -113,9 +113,17 @@ test('the OpenClaw route joins automatically while the root still waits for the 
  assert.equal(await page.locator('#speaker').getAttribute('aria-pressed'),'true');
  await page.getByRole('button',{name:'대화 기록',exact:true}).click();
  assert.ok(await page.locator('#conversation').isVisible());
+ const hangup=await page.locator('#stop .control-icon').boundingBox();
  await page.locator('#stop').click();
  await page.waitForFunction(()=>document.getElementById('status').textContent==='대기 중');
- assert.ok(await page.locator('#start').isVisible());
+ const dial=page.getByRole('button',{name:'통화',exact:true});
+ assert.ok(await dial.isVisible());
+ const icon=dial.locator('.control-icon');
+ const size=await icon.boundingBox();
+ assert.equal(size.width,hangup.width);
+ assert.equal(size.height,hangup.height);
+ await page.mouse.move(0,0);
+ assert.equal(await icon.evaluate(node=>getComputedStyle(node).backgroundColor),'rgb(155, 222, 116)');
 });
 
 test('OpenClaw exposes an audio resume action if autoplay requires a tap',{timeout:20000},async t=>{

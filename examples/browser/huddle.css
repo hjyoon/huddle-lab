@@ -409,7 +409,7 @@ button:disabled { cursor: default; }
   .call-wave, .call-wave i { animation: none !important; }
 }
 
-.direct-nav, .direct-speaker { display: none; }
+.direct-nav, .direct-speaker, .dial-icon { display: none; }
 
 .direct-call { background: #132421; }
 .direct-call .shell { max-width: none; margin: 0; padding: 0; }
@@ -524,12 +524,34 @@ button:disabled { cursor: default; }
 .direct-call .call-actions { gap: clamp(13px, 5vw, 27px); }
 .direct-call #resume-audio { margin-bottom: 16px; }
 .direct-call .call-action { flex-basis: 89px; font-size: .8rem; gap: 9px; }
+.direct-call #start {
+  display: inline-grid;
+  justify-items: center;
+  gap: 9px;
+  min-width: 89px;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: #d9e7e9;
+  font-size: .8rem;
+  font-weight: 600;
+}
+.direct-call #start:disabled { opacity: .48; }
 .direct-call .control-icon {
   width: clamp(56px, 20vw, 72px);
   height: clamp(56px, 20vw, 72px);
   background: #263b3fe0;
   color: #f7faf8;
 }
+.direct-call .dial-icon {
+  display: grid;
+  border-color: #b5ee92;
+  background: #9bde74;
+  color: #172b16;
+}
+.direct-call #start:not(:disabled):hover .dial-icon { background: #b7eb92; }
+.direct-call .dial-icon .handset-icon { transform: rotate(-40deg); }
 .direct-call .hangup .control-icon { background: #c83352; border-color: #ed647e; }
 .direct-call .hangup:not(:disabled):hover .control-icon { background: #d94864; }
 .direct-call .call-action[aria-pressed="true"] .control-icon {
