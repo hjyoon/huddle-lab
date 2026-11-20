@@ -409,7 +409,7 @@ button:disabled { cursor: default; }
   .call-wave, .call-wave i { animation: none !important; }
 }
 
-.direct-nav, .direct-speaker, .dial-icon, .call-ambience, .call-rec { display: none; }
+.direct-nav, .direct-speaker, .dial-icon, .call-ambience { display: none; }
 
 @font-face {
   font-family: Pretendard;
@@ -528,32 +528,7 @@ button:disabled { cursor: default; }
   line-height: 1;
   letter-spacing: -.035em;
 }
-.direct-call .call-clock { position: relative; }
-.direct-call .call:not([data-phase="connected"]) .call-clock { display: none; }
-.direct-call .call[data-phase="connected"][data-muted="false"] .call-rec { display: inline-flex; }
-.direct-call .call-rec {
-  position: absolute;
-  top: 50%;
-  left: calc(100% + 11px);
-  transform: translateY(-50%);
-  align-items: center;
-  gap: 6px;
-  padding: 3px 8px;
-  border: 1px solid #ff738757;
-  border-radius: 999px;
-  background: #251e29d9;
-  color: #ffdce1;
-  font-size: .7rem;
-  font-weight: 700;
-  letter-spacing: .06em;
-}
-.call-rec-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #ff556b;
-  box-shadow: 0 0 8px #ff556b65;
-}
+.direct-call .call:not([data-phase="connected"]) #call-duration { display: none; }
 .direct-call .call-status { background: #142822a6; border-color: #b6e6d54a; }
 .direct-call .call-footer { grid-row: 5; width: min(100%, 540px); margin-inline: auto; }
 .direct-call .call-actions { gap: clamp(13px, 5vw, 27px); }
