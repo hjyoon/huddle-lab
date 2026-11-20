@@ -70,3 +70,25 @@ test('a late readiness response from the previous AI cannot overwrite the new se
  release();await page.waitForFunction(()=>!document.getElementById('start').disabled);
  assert.equal(await page.locator('#provider').inputValue(),'claude');assert.equal((await page.locator('#setup').textContent()).includes('old Codex result'),false);
 });
+test('the mobile call surface shows the live timer, accessible controls and the transcript ahead of settings',{timeout:20000},async t=>{
+ const page=await pageFor(t);
+ await page.setViewportSize({width:390,height:844});
+ await page.goto(host.url);
+ await page.locator('#provider').selectOption('claude');
+ await page.locator('#start').click();
+ await page.waitForFunction(()=>document.getElementById('status').textContent==='통화 중');
+ assert.ok(await page.locator('#start').isHidden());
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth),390);
+ const position=async id=>(await page.locator(id).boundingBox()).y;
+ assert.ok(await position('#stop')<844);
+ assert.ok(await position('#conversation-title')<await position('#settings-title'));
+ const mute=page.getByRole('button',{name:'마이크 음소거',exact:true});
+ await mute.click();
+ assert.equal(await page.locator('#mute').getAttribute('aria-pressed'),'true');
+ await page.waitForFunction(()=>document.getElementById('call-duration').textContent!=='00:00');
+ await page.locator('#stop').click();
+ await page.waitForFunction(()=>document.getElementById('status').textContent==='대기 중');
+ assert.equal(await page.locator('#call-duration').textContent(),'00:00');
+ assert.ok(await page.locator('#call-actions').isHidden());
+ assert.ok(await page.locator('#start').isVisible());
+});

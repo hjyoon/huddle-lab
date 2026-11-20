@@ -1,46 +1,136 @@
 <!doctype html>
-<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AI Huddle</title>
-<style>
-:root{font:16px/1.65 system-ui,sans-serif;color-scheme:light dark}body{max-width:720px;margin:56px auto;padding:0 24px}h1{font-size:1.8rem}button,select,input{font:inherit;padding:10px 16px;margin:5px 5px 5px 0}button{cursor:pointer}button:disabled{cursor:default}#error{color:light-dark(#ad2525,#ff9999)}#workspace{overflow-wrap:anywhere}.choice{display:flex;align-items:center;gap:12px;flex-wrap:wrap}#remote-settings label{display:block;margin-top:12px}#remote-url{box-sizing:border-box;width:100%;min-width:0}fieldset{margin:16px 0}small{display:block} [hidden]{display:none!important}
-.credential-field { display: flex; align-items: stretch; }
-.credential-field input { flex: 1; min-width: 0; }
-.credential-field button { display: grid; place-items: center; padding-inline: 12px; }
-</style></head><body>
-<h1>AI Huddle</h1>
-<div class="choice"><label for="provider">대화할 AI</label><select id="provider" aria-label="대화할 AI"><option value="codex">Codex</option><option value="claude">Claude</option><option value="openclaw">OpenClaw</option><option value="hermes">Hermes</option></select></div>
-<div id="openclaw-choice" class="choice" hidden><label for="openclaw-mode">OpenClaw 연결</label><select id="openclaw-mode"><option value="local">로컬 모델</option><option value="remote">Gateway (로컬 음성)</option><option value="remote-realtime">Gateway (실시간 음성)</option></select></div>
-<form id="remote-settings" hidden autocomplete="off">
-<fieldset id="remote-fields"><legend>원격 OpenClaw</legend>
-<div id="remote-editor">
-<label for="remote-url">Gateway 주소</label><input id="remote-url" type="url" placeholder="wss://gateway.example" required spellcheck="false" autocapitalize="none">
-<label for="remote-auth-type">인증 방식</label><select id="remote-auth-type"><option value="token">토큰</option><option value="password">비밀번호</option></select>
-<label for="remote-secret">인증 정보</label>
-<div class="credential-field">
-<input id="remote-secret" type="password" autocomplete="off" required maxlength="4096" spellcheck="false" autocapitalize="none" aria-describedby="remote-privacy">
-<button id="remote-secret-toggle" type="button" aria-label="인증 정보 보기" aria-controls="remote-secret" aria-pressed="false" title="인증 정보 보기">
-<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-<path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/><path id="remote-secret-slash" d="M3 3l18 18" hidden/>
-</svg>
-</button>
-</div>
-<small id="remote-privacy">인증 정보는 Huddle을 실행한 컴퓨터에 저장됩니다.</small>
-<label for="remote-agent">전용 에이전트 ID (선택)</label><input id="remote-agent" placeholder="huddle-voice" maxlength="64" spellcheck="false" autocapitalize="none">
-</div>
-<p id="remote-vpn-note" hidden>저장된 원격 연결로 통화할 수 있습니다. 인증은 Huddle 호스트의 로컬 화면에서 관리합니다.</p>
-<div class="choice">
-<button id="remote-apply" type="submit">저장 · 연결 확인</button>
-<button id="remote-recheck" type="button" hidden>연결 다시 확인</button>
-<button id="remote-delete" type="button" hidden>저장된 인증 삭제</button>
-</div>
-<small id="remote-config-status" role="status"></small>
-</fieldset></form>
-<p id="description">AI 연결을 준비합니다.</p>
-<p id="setup" role="status">설치 및 연결 상태 확인 중…</p>
-<p id="login-row" hidden><button id="login" type="button">브라우저에서 Claude 로그인</button></p>
-<p>작업 폴더: <span id="workspace">확인 중</span></p>
-<p><strong id="status">대기 중</strong> · <span id="activity">대기</span></p>
-<button id="start" disabled>통화 시작</button><button id="mute" disabled aria-pressed="false">마이크 음소거</button><button id="interrupt" disabled>응답 중단</button><button id="stop" disabled>종료</button>
-<p id="hint"></p><p>통화를 종료한 뒤 다른 AI를 선택할 수 있습니다.</p>
-<p id="error" role="alert"></p><h2>대화</h2><ol id="transcripts" aria-label="대화 발화문"></ol>
-<script type="module" src="/examples/browser/huddle-demo.js"></script></body></html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f5f7f9">
+  <title>AI Huddle</title>
+  <link rel="stylesheet" href="/examples/browser/huddle.css">
+</head>
+<body>
+  <div class="shell">
+    <header class="site-header">
+      <div class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></div>
+      <h1>AI Huddle</h1>
+    </header>
+    <main class="layout" id="call-layout" data-phase="idle">
+      <section class="call" id="call" aria-labelledby="call-title" data-phase="idle" data-activity="idle">
+        <div class="call-top">
+          <div class="call-status" role="status"><span class="status-dot" aria-hidden="true"></span><span id="status">대기 중</span></div>
+          <time id="call-duration" aria-label="통화 경과 시간" datetime="PT0S">00:00</time>
+        </div>
+
+        <div class="call-center">
+          <div class="call-orb" aria-hidden="true">
+            <div class="call-wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          </div>
+          <h2 id="call-title">Codex</h2>
+          <p id="activity" role="status"></p>
+        </div>
+
+        <div class="call-footer">
+          <button class="start-button" id="start" type="button" disabled>Codex와 통화 시작</button>
+          <div class="call-actions" id="call-actions" hidden>
+            <button class="call-action" id="mute" type="button" disabled aria-pressed="false">
+              <span class="control-icon"><span class="mic-icon" aria-hidden="true"></span></span>
+              <span id="mute-label">마이크 음소거</span>
+            </button>
+            <button class="call-action" id="interrupt" type="button" disabled>
+              <span class="control-icon"><span class="interrupt-icon" aria-hidden="true"></span></span>
+              <span>응답 중단</span>
+            </button>
+            <button class="call-action hangup" id="stop" type="button" disabled>
+              <span class="control-icon"><span class="handset-icon" aria-hidden="true"></span></span>
+              <span>종료</span>
+            </button>
+          </div>
+          <p id="error" class="call-error" role="alert"></p>
+        </div>
+      </section>
+
+      <section class="panel settings" id="settings" aria-labelledby="settings-title">
+        <h2 id="settings-title">연결 설정</h2>
+        <div class="provider-settings">
+          <div class="field">
+            <label for="provider">대화할 AI</label>
+            <select id="provider">
+              <option value="codex">Codex</option>
+              <option value="claude">Claude</option>
+              <option value="openclaw">OpenClaw</option>
+              <option value="hermes">Hermes</option>
+            </select>
+          </div>
+          <div id="openclaw-choice" class="field" hidden>
+            <label for="openclaw-mode">OpenClaw 연결</label>
+            <select id="openclaw-mode">
+              <option value="local">로컬 모델</option>
+              <option value="remote">Gateway (로컬 음성)</option>
+              <option value="remote-realtime">Gateway (실시간 음성)</option>
+            </select>
+          </div>
+        </div>
+        <p id="setup" class="setup-status" role="status">설치 및 연결 상태 확인 중…</p>
+        <p id="login-row" hidden><button class="field-button" id="login" type="button">브라우저에서 Claude 로그인</button></p>
+
+        <form id="remote-settings" hidden autocomplete="off">
+          <fieldset id="remote-fields">
+            <legend>원격 OpenClaw</legend>
+            <div class="gateway-fields" id="remote-editor">
+              <div class="field gateway-wide">
+                <label for="remote-url">Gateway 주소</label>
+                <input id="remote-url" type="url" placeholder="wss://gateway.example" required spellcheck="false" autocapitalize="none">
+              </div>
+              <div class="field">
+                <label for="remote-auth-type">인증 방식</label>
+                <select id="remote-auth-type"><option value="token">토큰</option><option value="password">비밀번호</option></select>
+              </div>
+              <div class="field">
+                <label for="remote-agent">전용 에이전트 ID <span class="optional">(선택)</span></label>
+                <input id="remote-agent" placeholder="huddle-voice" maxlength="64" spellcheck="false" autocapitalize="none">
+              </div>
+              <div class="field gateway-wide">
+                <label for="remote-secret">인증 정보</label>
+                <div class="credential-field">
+                  <input id="remote-secret" type="password" autocomplete="off" required maxlength="4096" spellcheck="false" autocapitalize="none" aria-describedby="remote-privacy">
+                  <button class="field-button reveal" id="remote-secret-toggle" type="button" aria-label="인증 정보 보기" aria-controls="remote-secret" aria-pressed="false" title="인증 정보 보기">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/><path id="remote-secret-slash" d="M3 3l18 18" hidden/>
+                    </svg>
+                  </button>
+                </div>
+                <small id="remote-privacy">인증 정보는 Huddle을 실행한 컴퓨터에 저장됩니다.</small>
+              </div>
+            </div>
+            <p id="remote-vpn-note" hidden>저장된 원격 연결로 통화할 수 있습니다. 인증은 Huddle 호스트의 로컬 화면에서 관리합니다.</p>
+            <div class="gateway-actions">
+              <button class="field-button save" id="remote-apply" type="submit">저장 · 연결 확인</button>
+              <button class="field-button" id="remote-recheck" type="button" hidden>연결 다시 확인</button>
+              <button class="field-button delete" id="remote-delete" type="button" hidden>저장된 인증 삭제</button>
+            </div>
+            <small id="remote-config-status" role="status"></small>
+          </fieldset>
+        </form>
+
+        <details class="connection-info">
+          <summary>연결 정보</summary>
+          <p id="description">AI 연결을 준비합니다.</p>
+          <p id="hint"></p>
+          <dl class="workspace"><dt>작업 폴더</dt><dd id="workspace">확인 중</dd></dl>
+        </details>
+      </section>
+
+      <section class="panel conversation" aria-labelledby="conversation-title">
+        <h2 id="conversation-title">대화 기록</h2>
+        <div class="transcript-scroll" id="transcript-scroll" tabindex="0" aria-label="대화 기록">
+          <div class="empty-transcript" id="empty-transcript">
+            <span class="bubble-icon" aria-hidden="true"><i></i><i></i><i></i></span>
+            <p>아직 대화가 없습니다.</p>
+          </div>
+          <ol id="transcripts" aria-label="대화 발화문" aria-live="polite" aria-relevant="additions"></ol>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script type="module" src="/examples/browser/huddle-demo.js"></script>
+</body>
+</html>

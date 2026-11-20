@@ -10,6 +10,8 @@ const vpnAccess=location.protocol==="https:";
 let huddle,off,ready=false,selected="codex",generation=0,checking,remoteMode="local",configuring=false;
 let savedRemote=false,remoteStorageError=false;
 let savedUrl,savedAuthType,usingSavedSecret=false,revealing,canLogin=false,loggingIn=false;
+const emptyRows=[];
+let displayedRows=emptyRows,connectedAt,clock;
 const secretInput=element("remote-secret");
 const authTypeInput=element("remote-auth-type");
 const remoteUrlInput=element("remote-url");
@@ -22,8 +24,54 @@ function maskSecret(){
  secretInput.type="password";
 }
 const idle=()=>!huddle||["idle","error"].includes(huddle.snapshot().phase);
+function setText(id,text){
+ const node=element(id);
+ if(node.textContent!==text)node.textContent=text;
+}
+function renderTime(){
+ const seconds=connectedAt===undefined?0:Math.floor((performance.now()-connectedAt)/1000);
+ const hours=Math.floor(seconds/3600),minutes=Math.floor(seconds/60)%60;
+ const parts=hours?[hours,minutes,seconds%60]:[minutes,seconds%60];
+ setText("call-duration",parts.map(value=>String(value).padStart(2,"0")).join(":"));
+ element("call-duration").dateTime=`PT${seconds}S`;
+}
+function updateClock(phase){
+ if(phase==="connected"){
+  if(clock===undefined){connectedAt=performance.now();renderTime();clock=setInterval(renderTime,250);}
+  return;
+ }
+ clearInterval(clock);clock=undefined;
+ if(phase!=="leaving"){connectedAt=undefined;renderTime();}
+}
+function renderTranscripts(rows){
+ if(rows===displayedRows)return;
+ const list=element("transcripts"),scroll=element("transcript-scroll");
+ const atBottom=scroll.scrollHeight-scroll.clientHeight-scroll.scrollTop<32;
+ const appendFrom=rows[0]===displayedRows[0]?displayedRows.length:0;
+ if(!appendFrom)list.replaceChildren();
+ for(const row of rows.slice(appendFrom)){
+  const item=document.createElement("li");
+  item.className="message";item.dataset.speaker=row.speaker;
+  const speaker=document.createElement("span");speaker.className="message-speaker";
+  speaker.textContent=row.speaker==="user"?"사용자":names[selected];
+  const text=document.createElement("p");text.textContent=row.text;
+  item.append(speaker,text);list.append(item);
+ }
+ element("empty-transcript").hidden=rows.length>0;
+ if(atBottom)scroll.scrollTop=scroll.scrollHeight;
+ displayedRows=rows;
+}
 const render=()=>{
  const state=huddle?.snapshot(),phase=state?.phase??"idle",connected=phase==="connected";
+ const active=["connecting","connected","leaving"].includes(phase);
+ const activity=state?.activity??"idle";
+ const start=element("start"),call=element("call");
+ const focusMoved=active&&document.activeElement===start;
+ element("call-layout").dataset.phase=phase;
+ call.dataset.phase=phase;call.dataset.activity=activity;call.dataset.muted=String(state?.muted??false);
+ element("settings").dataset.ready=String(ready);
+ updateClock(phase);
+ setText("call-title",names[selected]);
  element("provider").disabled=!["idle","error"].includes(phase);
  element("openclaw-choice").hidden=selected!=="openclaw";
  element("remote-settings").hidden=selected!=="openclaw"||remoteMode==="local";
@@ -44,15 +92,18 @@ const render=()=>{
  if(configuring)element("provider").disabled=true;
  element("login-row").hidden=!canLogin||selected!=="claude";
  element("login").disabled=loggingIn||!["idle","error"].includes(phase);
- element("start").disabled=!ready||!["idle","error"].includes(phase);
- element("start").textContent=`${names[selected]}와 통화 시작`;
+ start.disabled=!ready||active;start.hidden=active;
+ element("call-actions").hidden=!active;
+ setText("start",`${names[selected]}와 통화 시작`);
  element("mute").disabled=!connected;element("interrupt").disabled=!connected||!["thinking","speaking"].includes(state.activity);
  element("stop").disabled=!["connecting","connected"].includes(phase);
- element("mute").textContent=state?.muted?"마이크 음소거 해제":"마이크 음소거";element("mute").setAttribute("aria-pressed",String(state?.muted??false));
- element("status").textContent=({idle:"대기 중",connecting:`${names[selected]} 연결 중`,connected:"통화 중",leaving:"종료 중",error:"연결 실패"})[phase];
- element("activity").textContent=({idle:"대기",listening:"듣는 중",thinking:"답변 준비 중",speaking:"말하는 중"})[state?.activity??"idle"];
- element("error").textContent=state?.error??"";
- element("transcripts").replaceChildren(...(state?.transcripts??[]).map(row=>{const li=document.createElement("li");li.textContent=`${row.speaker==="user"?"사용자":names[selected]}: ${row.text}`;return li;}));
+ if(focusMoved&&!element("stop").disabled)element("stop").focus({preventScroll:true});
+ setText("mute-label",state?.muted?"마이크 음소거 해제":"마이크 음소거");
+ element("mute").setAttribute("aria-pressed",String(state?.muted??false));
+ setText("status",({idle:"대기 중",connecting:`${names[selected]} 연결 중`,connected:"통화 중",leaving:"종료 중",error:"연결 실패"})[phase]);
+ setText("activity",state?.muted&&activity==="listening"?"마이크 음소거":({idle:"",listening:"듣는 중",thinking:"답변 준비 중",speaking:"말하는 중"})[activity]);
+ setText("error",state?.error??"");
+ renderTranscripts(state?.transcripts??emptyRows);
 };
 async function choose(id){
  if(!Object.hasOwn(names,id)||!idle()){element("provider").value=selected;return;}
@@ -100,7 +151,15 @@ async function choose(id){
    const provider=id==="codex"||status.voiceTransport==="codex-realtime"
     ? createCodexVoiceProvider({connect:createCodexLocalConnector(status.wsUrl)})
     : id==="claude"?createClaudeVoiceProvider({url:status.wsUrl}):id==="hermes"?createHermesVoiceProvider({url:status.wsUrl}):createOpenClawVoiceProvider({url:status.wsUrl});
-   huddle=createAgentHuddle({provider,openAudio:openWebAudio});off=huddle.subscribe(render);
+   const call=createAgentHuddle({provider,openAudio:openWebAudio});
+   huddle=call;
+   let previousState=call.snapshot();
+   off=call.subscribe(()=>{
+    const state=call.snapshot();
+    if(state.phase===previousState.phase&&state.activity===previousState.activity&&state.muted===previousState.muted&&
+       state.transcripts===previousState.transcripts&&state.error===previousState.error)return;
+    previousState=state;render();
+   });
   }
  }catch(error){if(token===generation&&!signal.aborted)element("setup").textContent=error.message;}
  if(token===generation)render();
@@ -191,8 +250,14 @@ element("login").onclick=async()=>{
  }catch(error){if(selected==="claude")element("setup").textContent=error.message;}
  finally{loggingIn=false;render();}
 };
-element("start").onclick=()=>{maskSecret();render();void huddle?.start();};element("mute").onclick=()=>huddle?.mute();element("interrupt").onclick=()=>{void huddle?.interrupt();};element("stop").onclick=()=>{void huddle?.leave();};
-window.addEventListener("pagehide",()=>{maskSecret();generation++;checking?.abort();off?.();void huddle?.dispose();});
+element("start").onclick=()=>{maskSecret();render();void huddle?.start();};
+element("mute").onclick=()=>huddle?.mute();
+element("interrupt").onclick=()=>{void huddle?.interrupt();};
+element("stop").onclick=async()=>{
+ const call=huddle;await call?.leave();
+ if(call===huddle&&!element("start").disabled)element("start").focus({preventScroll:true});
+};
+window.addEventListener("pagehide",()=>{clearInterval(clock);maskSecret();generation++;checking?.abort();off?.();void huddle?.dispose();});
 try{selected=Object.hasOwn(names,localStorage.getItem("huddle-ai"))?localStorage.getItem("huddle-ai"):"codex";}catch{}
 try{const savedMode=localStorage.getItem("huddle-openclaw-mode");if(["remote","remote-realtime"].includes(savedMode))remoteMode=savedMode;element("remote-url").value=localStorage.getItem("huddle-openclaw-url")??"";}catch{}
 element("openclaw-mode").value=remoteMode;
