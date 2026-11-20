@@ -411,7 +411,31 @@ button:disabled { cursor: default; }
 
 .direct-nav, .direct-speaker, .dial-icon, .call-ambience { display: none; }
 
-.direct-call { background: #132421; }
+@font-face {
+  font-family: Pretendard;
+  src: url("./fonts/Pretendard-Regular.subset.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: Pretendard;
+  src: url("./fonts/Pretendard-SemiBold.subset.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: Pretendard;
+  src: url("./fonts/Pretendard-Bold.subset.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+.direct-call {
+  background: #132421;
+  font-family: Pretendard, ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
 .direct-call .shell { max-width: none; margin: 0; padding: 0; }
 .direct-call .site-header, .direct-call .settings, .direct-call .conversation,
 .direct-call #interrupt { display: none; }

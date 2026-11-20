@@ -41,3 +41,6 @@ worklet generation fencing and owned process-group cleanup.
 Buzz UI, artwork, other agent integrations and application relay implementations
 are not included. Upstream NOTICE.md's asset and other-feature attributions
 do not pertain to the extracted files.
+
+The Pretendard web fonts in examples/browser/fonts/ are distributed under
+the SIL Open Font License 1.1. See examples/browser/fonts/OFL-Pretendard.txt.
