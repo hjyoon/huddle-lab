@@ -409,7 +409,7 @@ button:disabled { cursor: default; }
   .call-wave, .call-wave i { animation: none !important; }
 }
 
-.direct-nav, .direct-speaker, .dial-icon, .call-ambience { display: none; }
+.direct-speaker, .dial-icon, .call-ambience { display: none; }
 
 @font-face {
   font-family: Pretendard;
@@ -446,7 +446,7 @@ button:disabled { cursor: default; }
   height: 100vh;
   height: 100dvh;
   min-height: 28rem;
-  grid-template-rows: auto auto auto minmax(5rem, 1fr) auto;
+  grid-template-rows: auto auto minmax(5rem, 1fr) auto;
   padding: max(20px, env(safe-area-inset-top)) max(21px, env(safe-area-inset-right))
     max(28px, calc(env(safe-area-inset-bottom) + 16px)) max(21px, env(safe-area-inset-left));
   border: 0;
@@ -474,31 +474,8 @@ button:disabled { cursor: default; }
 @media (prefers-reduced-motion: reduce) {
   .call-glow { transition: none; }
 }
-.direct-call .direct-nav {
-  grid-row: 1;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  width: min(100%, 540px);
-  margin-inline: auto;
-}
-.direct-nav a {
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-  padding: 6px 13px;
-  border: 1px solid #b6e6d54a;
-  border-radius: 13px;
-  background: #12231f75;
-  color: #e0f3eb;
-  font-size: .79rem;
-  font-weight: 650;
-  text-decoration: none;
-}
-.direct-nav a:hover { background: #28473f; }
 .direct-call .call-center {
-  grid-row: 2;
+  grid-row: 1;
   padding: clamp(24px, 6vh, 66px) 0 0;
   gap: 7px;
 }
@@ -514,7 +491,7 @@ button:disabled { cursor: default; }
 .direct-call #call-title { max-width: 100%; overflow-wrap: anywhere; font-size: clamp(1.6rem, 6vw, 2.15rem); letter-spacing: -.04em; }
 .direct-call #activity { display: none; }
 .direct-call .call-top {
-  grid-row: 3;
+  grid-row: 2;
   justify-content: center;
   margin-top: clamp(12px, 3vh, 32px);
 }
@@ -527,7 +504,7 @@ button:disabled { cursor: default; }
 }
 .direct-call .call:not([data-phase="connected"]) #call-duration { display: none; }
 .direct-call .call-status { background: #142822a6; border-color: #b6e6d54a; }
-.direct-call .call-footer { grid-row: 5; width: min(100%, 540px); margin-inline: auto; }
+.direct-call .call-footer { grid-row: 4; width: min(100%, 540px); margin-inline: auto; }
 .direct-call .call-actions { gap: clamp(13px, 5vw, 27px); }
 .direct-call #resume-audio { margin-bottom: 16px; }
 .direct-call .call-action { flex-basis: 89px; font-size: .8rem; gap: 9px; }
@@ -595,7 +572,7 @@ button:disabled { cursor: default; }
   transform: rotate(-45deg);
 }
 .direct-call .conversation {
-  grid-area: 4 / 1;
+  grid-area: 3 / 1;
   min-height: 0;
   width: min(100%, 540px);
   margin-block: 12px;

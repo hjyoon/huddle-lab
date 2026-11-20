@@ -147,6 +147,7 @@ test('the OpenClaw route uses Gateway realtime voice after a tap and shows elaps
  await page.waitForFunction(()=>!document.getElementById('start').disabled);
  assert.equal(await page.locator('#status').textContent(),'대기 중');
  assert.equal(await page.locator('#provider').inputValue(),'codex');
+ assert.ok(await page.getByRole('heading',{name:'연결 설정'}).isVisible());
  await page.locator('#provider').selectOption('openclaw');
  await page.locator('#openclaw-mode').selectOption('remote');
  await page.getByLabel('통화 표시 이름').fill('도우미');
@@ -168,6 +169,7 @@ test('the OpenClaw route uses Gateway realtime voice after a tap and shows elaps
  assert.equal(status.voiceTransport,'codex-realtime');
  const dial=page.getByRole('button',{name:'통화',exact:true});
  const duration=page.locator('#call-duration');
+ assert.equal(await page.getByRole('link',{name:'연결 설정'}).count(),0);
  assert.equal(await page.locator('#call-title + #call-duration').count(),1);
  assert.equal(await page.locator('.call-top #call-duration').count(),0);
  await page.waitForFunction(()=>!document.getElementById('start').disabled);
@@ -226,9 +228,6 @@ test('the OpenClaw route uses Gateway realtime voice after a tap and shows elaps
  assert.equal(size.height,hangup.height);
  await page.mouse.move(0,0);
  assert.equal(await icon.evaluate(node=>getComputedStyle(node).backgroundColor),'rgb(155, 222, 116)');
- await page.getByRole('link',{name:'연결 설정'}).click();
- await page.waitForFunction(()=>document.getElementById('openclaw-mode').value==='remote-realtime');
- assert.equal(await page.locator('#provider').inputValue(),'openclaw');
 });
 
 test('OpenClaw exposes an audio resume action if autoplay requires a tap',{timeout:20000},async t=>{
