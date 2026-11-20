@@ -352,4 +352,4 @@ if(directCall||new URLSearchParams(location.search).get("openclaw")==="remote"){
  selected="openclaw";remoteMode="remote";element("openclaw-mode").value=remoteMode;
 }
 if(directCall){element("call-actions").append(element("mute"));animateCallBackdrop();}
-void choose(selected).then(()=>{if(directCall&&ready&&!document.hidden)void startCall();});
+void choose(selected);

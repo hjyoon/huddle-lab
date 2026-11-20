@@ -528,6 +528,7 @@ button:disabled { cursor: default; }
   line-height: 1;
   letter-spacing: -.035em;
 }
+.direct-call .call:not([data-phase="connected"]) #call-duration { display: none; }
 .direct-call .call-status { background: #142822a6; border-color: #b6e6d54a; }
 .direct-call .call-footer { grid-row: 5; width: min(100%, 540px); margin-inline: auto; }
 .direct-call .call-actions { gap: clamp(13px, 5vw, 27px); }
