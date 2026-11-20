@@ -344,10 +344,13 @@ element("stop").onclick=async()=>{
 window.addEventListener("pagehide",()=>{clearInterval(clock);maskSecret();generation++;checking?.abort();off?.();void huddle?.dispose();});
 try{selected=Object.hasOwn(names,localStorage.getItem("huddle-ai"))?localStorage.getItem("huddle-ai"):"codex";}catch{}
 try{const savedMode=localStorage.getItem("huddle-openclaw-mode");if(["remote","remote-realtime"].includes(savedMode))remoteMode=savedMode;element("remote-url").value=localStorage.getItem("huddle-openclaw-url")??"";}catch{}
-element("openclaw-mode").value=remoteMode;
-if(directCall||new URLSearchParams(location.search).get("openclaw")==="remote"){
- selected="openclaw";remoteMode="remote";element("openclaw-mode").value=remoteMode;
+const requestedOpenClawMode=new URLSearchParams(location.search).get("openclaw");
+if(directCall){
+ selected="openclaw";remoteMode="remote-realtime";
+}else if(["remote","remote-realtime"].includes(requestedOpenClawMode)){
+ selected="openclaw";remoteMode=requestedOpenClawMode;
 }
+element("openclaw-mode").value=remoteMode;
 if(directCall){
  element("call-actions").append(element("mute"));
  element("call-title").after(element("call-duration"));

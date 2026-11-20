@@ -93,35 +93,79 @@ test('the mobile call surface shows the live timer, accessible controls and the 
  assert.ok(await page.locator('#start').isVisible());
 });
 
-test('the OpenClaw route waits for a tap and only shows elapsed time during a call',{timeout:20000},async t=>{
+async function startRealtimeFixture(t,page){
  const callFixtures=providerFixtures();
- callFixtures.openclaw.backend.reply=async()=>('이전 대화는 스크롤해서 읽을 수 있습니다. 다음 발화는 이어서 아래에 표시됩니다. ').repeat(16);
- const direct=await createAiHost({port:0,...callFixtures,openclawRemote:{
+ const threadId='realtime-test-thread';
+ let notify;
+ const direct=await createAiHost({port:0,...callFixtures,codex:{
+  openclawMain:true,model:'coordinator',
+  async createRpc(){return{
+   subscribe(listener){notify=listener;},
+   async close(){},
+   async request(method,params){
+    if(method==='account/read')return{account:{type:'chatgpt'}};
+    if(method==='thread/start')return{thread:{id:threadId}};
+    if(method==='thread/realtime/start'){
+     const sdp=await page.evaluate(async offer=>{
+      const peer=window.fixturePeer=new RTCPeerConnection();
+      await peer.setRemoteDescription({type:'offer',sdp:offer});
+      await peer.setLocalDescription(await peer.createAnswer());
+      if(peer.iceGatheringState!=='complete')await new Promise(resolve=>{
+       peer.addEventListener('icegatheringstatechange',()=>{
+        if(peer.iceGatheringState==='complete')resolve();
+       });
+      });
+      return peer.localDescription.sdp;
+     },params.transport.sdp);
+     notify({method:'thread/realtime/sdp',params:{threadId,sdp}});
+    }
+    if(method==='thread/realtime/stop')await page.evaluate(()=>window.fixturePeer?.close()).catch(()=>{});
+    return{};
+   },
+  };},
+ },openclawRemote:{
   remote:{url:'wss://gateway.example/',token:'fixture-token'},backend:callFixtures.openclaw.backend,
+  async run(_,args){
+   if(args[2]==='health')return JSON.stringify({ok:true,agents:[{agentId:'main'}]});
+   if(args[2]==='agent.wait')return JSON.stringify({status:'timeout'});
+   throw new Error('Unexpected Gateway readiness call');
+  },
  }});
  t.after(()=>direct.close());
+ return{url:direct.url,transcript(text){
+  notify({method:'thread/realtime/item/completed',params:{
+   threadId,item:{id:'fixture-reply',type:'transcriptSegment',role:'assistant',text},
+  }});
+ }};
+}
+
+test('the OpenClaw route uses Gateway realtime voice after a tap and shows elapsed time',{timeout:20000},async t=>{
  const page=await pageFor(t);
+ const direct=await startRealtimeFixture(t,page);
  await page.setViewportSize({width:390,height:844});
  await page.goto(direct.url);
  await page.waitForFunction(()=>!document.getElementById('start').disabled);
  assert.equal(await page.locator('#status').textContent(),'대기 중');
  assert.equal(await page.locator('#provider').inputValue(),'codex');
  await page.locator('#provider').selectOption('openclaw');
+ await page.locator('#openclaw-mode').selectOption('remote');
  await page.getByLabel('통화 표시 이름').fill('도우미');
  await page.addInitScript(()=>{
   if(location.pathname!=='/openclaw')return;
-  navigator.mediaDevices.getUserMedia=async()=>{
+  const getUserMedia=navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+  navigator.mediaDevices.getUserMedia=async constraints=>{
    await new Promise(resolve=>{window.continueCapture=resolve;});
-   const context=new AudioContext({sampleRate:48000});
-   const oscillator=context.createOscillator(),gain=context.createGain(),destination=context.createMediaStreamDestination();
-   gain.gain.value=0;
-   oscillator.connect(gain).connect(destination);oscillator.start();
-   await context.resume();
-   window.voiceFixture={context,gain};
-   return destination.stream;
+   return getUserMedia(constraints);
   };
  });
- await page.goto(direct.url+'/openclaw');
+ const [response]=await Promise.all([
+  page.waitForResponse(response=>new URL(response.url()).pathname==='/api/providers/openclaw'),
+  page.goto(direct.url+'/openclaw'),
+ ]);
+ assert.equal(new URL(response.url()).searchParams.get('mode'),'remote-realtime');
+ const status=await response.json();
+ assert.equal(status.ready,true);
+ assert.equal(status.voiceTransport,'codex-realtime');
  const dial=page.getByRole('button',{name:'통화',exact:true});
  const duration=page.locator('#call-duration');
  assert.equal(await page.locator('#call-title + #call-duration').count(),1);
@@ -153,11 +197,7 @@ test('the OpenClaw route waits for a tap and only shows elapsed time during a ca
  const conversation=page.locator('#call .call-top + #conversation');
  assert.ok(await conversation.isVisible());
  assert.equal(await conversation.evaluate(node=>getComputedStyle(node).backgroundColor),'rgba(0, 0, 0, 0)');
- await page.evaluate(()=>{
-  const {context,gain}=window.voiceFixture,start=context.currentTime+.04;
-  gain.gain.setValueAtTime(.2,start);
-  gain.gain.setValueAtTime(0,start+.32);
- });
+ direct.transcript(('이전 대화는 스크롤해서 읽을 수 있습니다. 다음 발화는 이어서 아래에 표시됩니다. ').repeat(16));
  const assistant=page.locator('#transcripts [data-speaker="assistant"] .message-speaker');
  await assistant.waitFor({state:'visible'});
  assert.equal(await assistant.textContent(),'도우미');
@@ -178,7 +218,6 @@ test('the OpenClaw route waits for a tap and only shows elapsed time during a ca
  const hangup=await page.locator('#stop .control-icon').boundingBox();
  await page.locator('#stop').click();
  await page.waitForFunction(()=>document.getElementById('status').textContent==='대기 중');
- await page.evaluate(()=>window.voiceFixture.context.close());
  assert.ok(await duration.isHidden());
  assert.ok(await dial.isVisible());
  const icon=dial.locator('.control-icon');
@@ -187,14 +226,14 @@ test('the OpenClaw route waits for a tap and only shows elapsed time during a ca
  assert.equal(size.height,hangup.height);
  await page.mouse.move(0,0);
  assert.equal(await icon.evaluate(node=>getComputedStyle(node).backgroundColor),'rgb(155, 222, 116)');
+ await page.getByRole('link',{name:'연결 설정'}).click();
+ await page.waitForFunction(()=>document.getElementById('openclaw-mode').value==='remote-realtime');
+ assert.equal(await page.locator('#provider').inputValue(),'openclaw');
 });
 
 test('OpenClaw exposes an audio resume action if autoplay requires a tap',{timeout:20000},async t=>{
- const direct=await createAiHost({port:0,...providerFixtures(),openclawRemote:{
-  remote:{url:'wss://gateway.example/',token:'fixture-token'},backend:fixtures.openclaw.backend,
- }});
- t.after(()=>direct.close());
  const page=await pageFor(t);
+ const direct=await startRealtimeFixture(t,page);
  await page.addInitScript(()=>{
   const resume=AudioContext.prototype.resume;
   const state=Object.getOwnPropertyDescriptor(BaseAudioContext.prototype,'state').get;
