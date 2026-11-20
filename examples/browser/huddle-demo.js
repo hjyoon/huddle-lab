@@ -166,8 +166,10 @@ const render=()=>{
  setText("mute-label",state?.muted?"마이크 음소거 해제":"마이크 음소거");
  element("mute").setAttribute("aria-pressed",String(state?.muted??false));
  const connecting=resumeAudio?"오디오 시작 대기":directCall?"연결 중":`${names[selected]} 연결 중`;
- setText("status",({idle:directCall&&!checked?"Gateway 확인 중":"대기 중",connecting,connected:"통화 중",leaving:"종료 중",error:"연결 실패"})[phase]);
- setText("activity",state?.muted&&activity==="listening"?"마이크 음소거":({idle:"",listening:"듣는 중",thinking:"답변 준비 중",speaking:"말하는 중"})[activity]);
+ const activityLabel=state?.muted&&activity==="listening"?"마이크 음소거":({idle:"",listening:"듣는 중",thinking:"답변 준비 중",speaking:"말하는 중"})[activity];
+ const statusLabel=({idle:directCall&&!checked?"Gateway 확인 중":"대기 중",connecting,connected:"통화 중",leaving:"종료 중",error:"연결 실패"})[phase];
+ setText("status",directCall&&connected&&activityLabel?activityLabel:statusLabel);
+ setText("activity",directCall?"":activityLabel);
  const error=state?.error??(directCall&&checked&&!ready?element("setup").textContent:"");
  setText("error",directCall&&/permission denied|not allowed by the user agent/i.test(error)
   ?"브라우저의 마이크 권한을 확인한 뒤 다시 연결해 주세요.":error);

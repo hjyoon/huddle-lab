@@ -131,12 +131,15 @@ test('the OpenClaw route waits for a tap and only shows elapsed time during a ca
  assert.equal(await page.locator('#status').textContent(),'연결 중');
  assert.ok(await duration.isHidden());
  await page.evaluate(()=>window.continueCapture());
- await page.waitForFunction(()=>document.getElementById('status').textContent==='통화 중');
+ await page.waitForFunction(()=>document.getElementById('status').textContent==='듣는 중');
+ assert.ok(await page.locator('#activity').isHidden());
  assert.ok(await duration.isVisible());
  await page.getByRole('button',{name:'마이크 음소거',exact:true}).click();
  assert.equal(await page.locator('#mute').getAttribute('aria-pressed'),'true');
+ assert.equal(await page.locator('#status').textContent(),'마이크 음소거');
  await page.getByRole('button',{name:'마이크 음소거 해제',exact:true}).click();
  assert.equal(await page.locator('#mute').getAttribute('aria-pressed'),'false');
+ assert.equal(await page.locator('#status').textContent(),'듣는 중');
  await page.waitForFunction(()=>document.getElementById('call-duration').textContent!=='00:00');
  assert.equal(await page.locator('#call-title').textContent(),'도우미');
  assert.ok(await page.locator('#settings').isHidden());
@@ -198,7 +201,7 @@ test('OpenClaw exposes an audio resume action if autoplay requires a tap',{timeo
  await page.getByRole('button',{name:'통화',exact:true}).click();
  const resume=page.getByRole('button',{name:'탭해서 오디오 시작'});
  await resume.click();
- await page.waitForFunction(()=>document.getElementById('status').textContent==='통화 중');
+ await page.waitForFunction(()=>document.getElementById('status').textContent==='듣는 중');
  assert.ok(await resume.isHidden());
  await page.locator('#stop').click();
  await page.waitForFunction(()=>document.getElementById('status').textContent==='대기 중');
