@@ -354,5 +354,9 @@ element("openclaw-mode").value=remoteMode;
 if(directCall||new URLSearchParams(location.search).get("openclaw")==="remote"){
  selected="openclaw";remoteMode="remote";element("openclaw-mode").value=remoteMode;
 }
-if(directCall){element("call-actions").append(element("mute"));animateCallBackdrop();}
+if(directCall){
+ element("call-actions").append(element("mute"));
+ element("call-title").after(element("call-duration"));
+ animateCallBackdrop();
+}
 void choose(selected);

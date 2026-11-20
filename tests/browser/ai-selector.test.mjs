@@ -122,6 +122,8 @@ test('the OpenClaw route waits for a tap and only shows elapsed time during a ca
  await page.goto(direct.url+'/openclaw');
  const dial=page.getByRole('button',{name:'통화',exact:true});
  const duration=page.locator('#call-duration');
+ assert.equal(await page.locator('#call-title + #call-duration').count(),1);
+ assert.equal(await page.locator('.call-top #call-duration').count(),0);
  await page.waitForFunction(()=>!document.getElementById('start').disabled);
  assert.equal(await page.locator('#status').textContent(),'대기 중');
  assert.equal(await page.evaluate(()=>window.continueCapture===undefined),true);

@@ -516,17 +516,15 @@ button:disabled { cursor: default; }
 .direct-call #activity { display: none; }
 .direct-call .call-top {
   grid-row: 3;
-  flex-direction: column-reverse;
-  justify-content: start;
-  gap: 12px;
+  justify-content: center;
   margin-top: clamp(12px, 3vh, 32px);
 }
 .direct-call #call-duration {
-  color: #f0f7f4;
-  font-weight: 350;
-  font-size: clamp(2.6rem, 12vw, 4rem);
-  line-height: 1;
-  letter-spacing: -.035em;
+  color: #c9ded7;
+  font-weight: 600;
+  font-size: 1.05rem;
+  line-height: 1.35;
+  letter-spacing: .025em;
 }
 .direct-call .call:not([data-phase="connected"]) #call-duration { display: none; }
 .direct-call .call-status { background: #142822a6; border-color: #b6e6d54a; }
