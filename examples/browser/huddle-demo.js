@@ -101,7 +101,7 @@ function updateClock(phase){
  clearInterval(clock);clock=undefined;
  if(phase!=="leaving"){connectedAt=undefined;renderTime();}
 }
-function renderTranscripts(rows){
+function renderTranscripts(rows,assistantName){
  if(rows===displayedRows)return;
  const list=element("transcripts"),scroll=element("transcript-scroll");
  const atBottom=scroll.scrollHeight-scroll.clientHeight-scroll.scrollTop<32;
@@ -111,7 +111,7 @@ function renderTranscripts(rows){
   const item=document.createElement("li");
   item.className="message";item.dataset.speaker=row.speaker;
   const speaker=document.createElement("span");speaker.className="message-speaker";
-  speaker.textContent=row.speaker==="user"?"사용자":names[selected];
+  speaker.textContent=row.speaker==="user"?"사용자":assistantName;
   const text=document.createElement("p");text.textContent=row.text;
   item.append(speaker,text);list.append(item);
  }
@@ -129,7 +129,8 @@ const render=()=>{
  call.dataset.phase=phase;call.dataset.activity=activity;call.dataset.muted=String(state?.muted??false);
  element("settings").dataset.ready=String(ready);
  updateClock(phase);
- setText("call-title",(directCall&&callNameInput.value.trim())||names[selected]);
+ const assistantName=(directCall&&callNameInput.value.trim())||names[selected];
+ setText("call-title",assistantName);
  element("provider").disabled=!["idle","error"].includes(phase);
  element("openclaw-choice").hidden=selected!=="openclaw";
  element("openclaw-name-field").hidden=selected!=="openclaw";
@@ -170,7 +171,7 @@ const render=()=>{
  const error=state?.error??(directCall&&checked&&!ready?element("setup").textContent:"");
  setText("error",directCall&&/permission denied|not allowed by the user agent/i.test(error)
   ?"브라우저의 마이크 권한을 확인한 뒤 다시 연결해 주세요.":error);
- renderTranscripts(state?.transcripts??emptyRows);
+ renderTranscripts(state?.transcripts??emptyRows,assistantName);
 };
 async function choose(id){
  if(!Object.hasOwn(names,id)||!idle()){element("provider").value=selected;return;}

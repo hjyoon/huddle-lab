@@ -108,10 +108,15 @@ test('the OpenClaw route waits for a tap and only shows elapsed time during a ca
  await page.getByLabel('통화 표시 이름').fill('도우미');
  await page.addInitScript(()=>{
   if(location.pathname!=='/openclaw')return;
-  const capture=navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
-  navigator.mediaDevices.getUserMedia=async(...args)=>{
+  navigator.mediaDevices.getUserMedia=async()=>{
    await new Promise(resolve=>{window.continueCapture=resolve;});
-   return capture(...args);
+   const context=new AudioContext({sampleRate:48000});
+   const oscillator=context.createOscillator(),gain=context.createGain(),destination=context.createMediaStreamDestination();
+   gain.gain.value=0;
+   oscillator.connect(gain).connect(destination);oscillator.start();
+   await context.resume();
+   window.voiceFixture={context,gain};
+   return destination.stream;
   };
  });
  await page.goto(direct.url+'/openclaw');
@@ -144,9 +149,18 @@ test('the OpenClaw route waits for a tap and only shows elapsed time during a ca
  assert.equal(await page.locator('#speaker').getAttribute('aria-pressed'),'true');
  await page.getByRole('button',{name:'대화 기록',exact:true}).click();
  assert.ok(await page.locator('#conversation').isVisible());
+ await page.evaluate(()=>{
+  const {context,gain}=window.voiceFixture,start=context.currentTime+.04;
+  gain.gain.setValueAtTime(.2,start);
+  gain.gain.setValueAtTime(0,start+.32);
+ });
+ const assistant=page.locator('#transcripts [data-speaker="assistant"] .message-speaker');
+ await assistant.waitFor({state:'visible'});
+ assert.equal(await assistant.textContent(),'도우미');
  const hangup=await page.locator('#stop .control-icon').boundingBox();
  await page.locator('#stop').click();
  await page.waitForFunction(()=>document.getElementById('status').textContent==='대기 중');
+ await page.evaluate(()=>window.voiceFixture.context.close());
  assert.ok(await duration.isHidden());
  assert.ok(await rec.isHidden());
  assert.ok(await dial.isVisible());
