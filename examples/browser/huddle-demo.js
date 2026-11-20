@@ -33,6 +33,40 @@ function setText(id,text){
  const node=element(id);
  if(node.textContent!==text)node.textContent=text;
 }
+function animateCallBackdrop(){
+ const colors=["#2d7668","#365aa0","#825294","#994e70","#886346","#3c7e9a","#4d7550","#5149a2"];
+ const reducedMotion=matchMedia("(prefers-reduced-motion: reduce)");
+ const layers=[...document.querySelectorAll(".call-glow")].map((node,index)=>({node,color:index,timer:undefined}));
+ const randomBetween=(min,max)=>min+Math.random()*(max-min);
+ function drift(layer){
+  const seconds=randomBetween(5,11);
+  const x=randomBetween(-38,38),y=randomBetween(-35,35),scale=randomBetween(.8,1.22);
+  layer.color=(layer.color+Math.floor(randomBetween(1,colors.length)))%colors.length;
+  Object.assign(layer.node.style,{
+   transitionDuration:`${seconds}s`,
+   transform:`translate(${x}%, ${y}%) scale(${scale})`,
+   color:colors[layer.color],
+   opacity:randomBetween(.42,.82),
+  });
+  layer.timer=setTimeout(()=>drift(layer),seconds*1000);
+ }
+ function syncMotion(){
+  layers.forEach((layer,index)=>{
+   clearTimeout(layer.timer);
+   if(reducedMotion.matches){
+    layer.node.removeAttribute("style");
+    layer.color=index;
+   }else if(!document.hidden){
+    layer.timer=setTimeout(()=>drift(layer),120+index*310);
+   }
+  });
+ }
+ reducedMotion.addEventListener("change",syncMotion);
+ document.addEventListener("visibilitychange",syncMotion);
+ window.addEventListener("pageshow",syncMotion);
+ window.addEventListener("pagehide",()=>layers.forEach(layer=>clearTimeout(layer.timer)));
+ syncMotion();
+}
 const openDirectAudio=createWebAudioAdapter({
  onResumePending(resume){
   const timer=setTimeout(()=>{resumeAudio=resume;render();},300);
@@ -317,5 +351,5 @@ element("openclaw-mode").value=remoteMode;
 if(directCall||new URLSearchParams(location.search).get("openclaw")==="remote"){
  selected="openclaw";remoteMode="remote";element("openclaw-mode").value=remoteMode;
 }
-if(directCall)element("call-actions").append(element("mute"));
+if(directCall){element("call-actions").append(element("mute"));animateCallBackdrop();}
 void choose(selected).then(()=>{if(directCall&&ready&&!document.hidden)void startCall();});
