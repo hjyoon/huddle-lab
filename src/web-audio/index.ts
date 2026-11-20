@@ -9,9 +9,12 @@ export type WebAudioOptions = {
   /** Override when the host serves or bundles the worklet at another URL.
    * Must allow AudioWorklet module loading under the host's origin/CSP. */
   workletUrl?: string | URL;
+  /** Expose a resume action while playback is waiting for a browser gesture. */
+  onResumePending?: (resume: () => Promise<void>) => (() => void);
 };
 
-/** Call from an explicit user action in an HTTPS/localhost browser context.
+/** Runs in an HTTPS/localhost browser context. Autostart callers can supply
+ * a user-controlled resume action when the browser waits for a gesture.
  * No microphone access or browser globals are used during module import. */
 export function createWebAudioAdapter(options: WebAudioOptions = {}): OpenHuddleAudio {
   const workletUrl = options.workletUrl ?? new URL("./capture.worklet.js", import.meta.url);
@@ -65,7 +68,14 @@ export function createWebAudioAdapter(options: WebAudioOptions = {}): OpenHuddle
     try {
       output = context.createGain();
       output.connect(context.destination);
-      await context.resume();
+      const resumed = context.resume();
+      const dismissResume = context.state === "suspended" ? options.onResumePending?.(() => context.resume()) : undefined;
+      if (dismissResume) signal.addEventListener("abort", dismissResume, { once:true });
+      try { await resumed; }
+      finally {
+        if (dismissResume) signal.removeEventListener("abort", dismissResume);
+        dismissResume?.();
+      }
       signal.throwIfAborted();
       if (context.sampleRate !== 48000)
         throw new Error("This audio device does not support 48 kHz Huddle audio.");

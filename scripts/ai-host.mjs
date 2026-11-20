@@ -156,7 +156,7 @@ export async function createAiHost({port=4184,cwd=process.cwd(),codex={},claude=
       }catch(error){json(200,{id,name:entry.name,ready:false,error:error.message});}
       return;
     }
-    if(path==="/")req.url="/examples/browser/huddle.html";
+    if(["/","/openclaw","/openclaw/"].includes(path))req.url="/examples/browser/huddle.html";
     await serveDemoFile(req,res);
   }
   const server=createServer((req,res)=>handleRequest(req,res,url));

@@ -5,6 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#f5f7f9">
   <title>AI Huddle</title>
+  <script>
+    if (/^\/openclaw\/?$/.test(location.pathname)) {
+      document.documentElement.classList.add("direct-call");
+      document.querySelector('meta[name="theme-color"]').content = "#102623";
+    }
+  </script>
   <link rel="stylesheet" href="/examples/browser/huddle.css">
 </head>
 <body>
@@ -15,6 +21,10 @@
     </header>
     <main class="layout" id="call-layout" data-phase="idle">
       <section class="call" id="call" aria-labelledby="call-title" data-phase="idle" data-activity="idle">
+        <nav class="direct-nav" aria-label="통화 메뉴">
+          <a href="/?openclaw=remote#settings" id="direct-settings">연결 설정</a>
+          <button id="toggle-transcript" type="button" aria-controls="conversation" aria-expanded="false">대화 기록</button>
+        </nav>
         <div class="call-top">
           <div class="call-status" role="status"><span class="status-dot" aria-hidden="true"></span><span id="status">대기 중</span></div>
           <time id="call-duration" aria-label="통화 경과 시간" datetime="PT0S">00:00</time>
@@ -30,7 +40,12 @@
 
         <div class="call-footer">
           <button class="start-button" id="start" type="button" disabled>Codex와 통화 시작</button>
+          <button class="start-button" id="resume-audio" type="button" hidden>탭해서 오디오 시작</button>
           <div class="call-actions" id="call-actions" hidden>
+            <button class="call-action direct-speaker" id="speaker" type="button" aria-pressed="false">
+              <span class="control-icon"><span class="speaker-icon" aria-hidden="true"></span></span>
+              <span id="speaker-label">오디오</span>
+            </button>
             <button class="call-action" id="mute" type="button" disabled aria-pressed="false">
               <span class="control-icon"><span class="mic-icon" aria-hidden="true"></span></span>
               <span id="mute-label">마이크 음소거</span>
@@ -119,7 +134,7 @@
         </details>
       </section>
 
-      <section class="panel conversation" aria-labelledby="conversation-title">
+      <section class="panel conversation" id="conversation" aria-labelledby="conversation-title">
         <h2 id="conversation-title">대화 기록</h2>
         <div class="transcript-scroll" id="transcript-scroll" tabindex="0" aria-label="대화 기록">
           <div class="empty-transcript" id="empty-transcript">

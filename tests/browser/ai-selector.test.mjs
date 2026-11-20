@@ -92,3 +92,57 @@ test('the mobile call surface shows the live timer, accessible controls and the 
  assert.ok(await page.locator('#call-actions').isHidden());
  assert.ok(await page.locator('#start').isVisible());
 });
+
+test('the OpenClaw route joins automatically while the root still waits for the user',{timeout:20000},async t=>{
+ const direct=await createAiHost({port:0,...providerFixtures(),openclawRemote:{
+  remote:{url:'wss://gateway.example/',token:'fixture-token'},backend:fixtures.openclaw.backend,
+ }});
+ t.after(()=>direct.close());
+ const page=await pageFor(t);
+ await page.setViewportSize({width:390,height:844});
+ await page.goto(direct.url);
+ await page.waitForFunction(()=>!document.getElementById('start').disabled);
+ assert.equal(await page.locator('#status').textContent(),'대기 중');
+ assert.equal(await page.locator('#provider').inputValue(),'codex');
+ await page.goto(direct.url+'/openclaw');
+ await page.waitForFunction(()=>document.getElementById('status').textContent==='통화 중');
+ assert.equal(await page.locator('#call-title').textContent(),'OpenClaw');
+ assert.ok(await page.locator('#settings').isHidden());
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth),390);
+ await page.getByRole('button',{name:'오디오',exact:true}).click();
+ assert.equal(await page.locator('#speaker').getAttribute('aria-pressed'),'true');
+ await page.getByRole('button',{name:'대화 기록',exact:true}).click();
+ assert.ok(await page.locator('#conversation').isVisible());
+ await page.locator('#stop').click();
+ await page.waitForFunction(()=>document.getElementById('status').textContent==='대기 중');
+ assert.ok(await page.locator('#start').isVisible());
+});
+
+test('OpenClaw exposes an audio resume action if autoplay requires a tap',{timeout:20000},async t=>{
+ const direct=await createAiHost({port:0,...providerFixtures(),openclawRemote:{
+  remote:{url:'wss://gateway.example/',token:'fixture-token'},backend:fixtures.openclaw.backend,
+ }});
+ t.after(()=>direct.close());
+ const page=await pageFor(t);
+ await page.addInitScript(()=>{
+  const resume=AudioContext.prototype.resume;
+  const state=Object.getOwnPropertyDescriptor(BaseAudioContext.prototype,'state').get;
+  const pending=[];
+  Object.defineProperty(AudioContext.prototype,'state',{get(){
+   return navigator.userActivation.hasBeenActive?state.call(this):'suspended';
+  }});
+  AudioContext.prototype.resume=function(){
+   if(!navigator.userActivation.hasBeenActive)return new Promise((resolve,reject)=>pending.push({resolve,reject}));
+   const resumed=resume.call(this);
+   for(const {resolve,reject} of pending.splice(0))resumed.then(resolve,reject);
+   return resumed;
+  };
+ });
+ await page.goto(direct.url+'/openclaw/');
+ const resume=page.getByRole('button',{name:'탭해서 오디오 시작'});
+ await resume.click();
+ await page.waitForFunction(()=>document.getElementById('status').textContent==='통화 중');
+ assert.ok(await resume.isHidden());
+ await page.locator('#stop').click();
+ await page.waitForFunction(()=>document.getElementById('status').textContent==='대기 중');
+});

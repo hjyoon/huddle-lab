@@ -1,5 +1,5 @@
 import { createAgentHuddle } from "../../dist/agent-voice/index.js";
-import { openWebAudio } from "../../dist/web-audio/index.js";
+import { createWebAudioAdapter,openWebAudio } from "../../dist/web-audio/index.js";
 import { createCodexVoiceProvider,createCodexLocalConnector } from "../../dist/codex-voice/index.js";
 import { createClaudeVoiceProvider } from "../../dist/claude-voice/index.js";
 import { createOpenClawVoiceProvider } from "../../dist/openclaw-voice/index.js";
@@ -7,11 +7,13 @@ import { createHermesVoiceProvider } from "../../dist/hermes-voice/index.js";
 const element=id=>document.getElementById(id);
 const names={codex:"Codex",claude:"Claude",openclaw:"OpenClaw",hermes:"Hermes"};
 const vpnAccess=location.protocol==="https:";
+const directCall=document.documentElement.classList.contains("direct-call");
 let huddle,off,ready=false,selected="codex",generation=0,checking,remoteMode="local",configuring=false;
 let savedRemote=false,remoteStorageError=false;
 let savedUrl,savedAuthType,usingSavedSecret=false,revealing,canLogin=false,loggingIn=false;
 const emptyRows=[];
 let displayedRows=emptyRows,connectedAt,clock;
+let checked=false,resumeAudio,speakerMuted=false,clearOutput;
 const secretInput=element("remote-secret");
 const authTypeInput=element("remote-auth-type");
 const remoteUrlInput=element("remote-url");
@@ -27,6 +29,25 @@ const idle=()=>!huddle||["idle","error"].includes(huddle.snapshot().phase);
 function setText(id,text){
  const node=element(id);
  if(node.textContent!==text)node.textContent=text;
+}
+const openDirectAudio=createWebAudioAdapter({
+ onResumePending(resume){
+  const timer=setTimeout(()=>{resumeAudio=resume;render();},300);
+  return ()=>{
+   clearTimeout(timer);
+   if(resumeAudio===resume){resumeAudio=undefined;render();}
+  };
+ },
+});
+async function openDirectCallAudio(send,ended,signal){
+ const audio=await openDirectAudio(send,ended,signal);
+ const clear=()=>audio.participants([]);
+ clearOutput=clear;
+ return {
+  ...audio,
+  play(peer,samples){if(!speakerMuted)audio.play(peer,samples);},
+  close(){if(clearOutput===clear)clearOutput=undefined;audio.close();},
+ };
 }
 function renderTime(){
  const seconds=connectedAt===undefined?0:Math.floor((performance.now()-connectedAt)/1000);
@@ -92,17 +113,23 @@ const render=()=>{
  if(configuring)element("provider").disabled=true;
  element("login-row").hidden=!canLogin||selected!=="claude";
  element("login").disabled=loggingIn||!["idle","error"].includes(phase);
- start.disabled=!ready||active;start.hidden=active;
+ start.disabled=(!ready&&!(directCall&&checked))||active;start.hidden=active;
+ element("resume-audio").hidden=!active||!resumeAudio;
  element("call-actions").hidden=!active;
- setText("start",`${names[selected]}와 통화 시작`);
+ setText("start",directCall&&checked&&(!ready||phase==="error")?"다시 연결":`${names[selected]}와 통화 시작`);
+ element("speaker").disabled=!connected;
+ element("speaker").setAttribute("aria-pressed",String(speakerMuted));
+ setText("speaker-label",speakerMuted?"오디오 켜기":"오디오");
  element("mute").disabled=!connected;element("interrupt").disabled=!connected||!["thinking","speaking"].includes(state.activity);
  element("stop").disabled=!["connecting","connected"].includes(phase);
  if(focusMoved&&!element("stop").disabled)element("stop").focus({preventScroll:true});
  setText("mute-label",state?.muted?"마이크 음소거 해제":"마이크 음소거");
  element("mute").setAttribute("aria-pressed",String(state?.muted??false));
- setText("status",({idle:"대기 중",connecting:`${names[selected]} 연결 중`,connected:"통화 중",leaving:"종료 중",error:"연결 실패"})[phase]);
+ setText("status",({idle:directCall&&!checked?"Gateway 확인 중":"대기 중",connecting:resumeAudio?"오디오 시작 대기":`${names[selected]} 연결 중`,connected:"통화 중",leaving:"종료 중",error:"연결 실패"})[phase]);
  setText("activity",state?.muted&&activity==="listening"?"마이크 음소거":({idle:"",listening:"듣는 중",thinking:"답변 준비 중",speaking:"말하는 중"})[activity]);
- setText("error",state?.error??"");
+ const error=state?.error??(directCall&&checked&&!ready?element("setup").textContent:"");
+ setText("error",directCall&&/permission denied|not allowed by the user agent/i.test(error)
+  ?"브라우저의 마이크 권한을 확인한 뒤 다시 연결해 주세요.":error);
  renderTranscripts(state?.transcripts??emptyRows);
 };
 async function choose(id){
@@ -111,9 +138,9 @@ async function choose(id){
  const realtime=id==="codex"||(gateway&&remoteMode==="remote-realtime");
  maskSecret();
  const token=++generation;checking?.abort();checking=new AbortController();const signal=checking.signal;
- const previous=huddle;off?.();off=undefined;huddle=undefined;ready=false;canLogin=false;selected=id;
+ const previous=huddle;off?.();off=undefined;huddle=undefined;ready=false;checked=false;canLogin=false;selected=id;
  element("provider").value=id;
- try{localStorage.setItem("huddle-ai",id);}catch{}
+ if(!directCall)try{localStorage.setItem("huddle-ai",id);}catch{}
  element("setup").textContent=`${names[id]} 설치 및 연결 상태 확인 중…`;element("workspace").textContent="확인 중";
  element("description").textContent=id==="codex"?"Codex와 실시간 음성으로 대화합니다. 통화 음성은 Codex의 실시간 서비스로 전송합니다.":id==="claude"?"Claude Code와 음성으로 대화합니다. 음성 인식·합성은 Huddle 호스트에서 처리하고 인식한 대화 내용은 Claude 서비스로 전송합니다.":id==="hermes"?"Hermes Agent와 음성으로 대화합니다. 음성 인식·합성은 Huddle 호스트에서 처리하고 인식한 대화 내용은 Hermes API 서버로 전송합니다. Hermes는 자신의 도구를 사용할 수 있어 답변에 시간이 걸릴 수 있습니다.":"OpenClaw에 설정된 모델과 음성으로 대화합니다. 음성 인식·합성은 Huddle 호스트에서 처리하고 인식한 대화 내용은 설정된 모델 서비스로 전송합니다.";
  if(gateway)element("description").textContent=realtime
@@ -151,7 +178,7 @@ async function choose(id){
    const provider=id==="codex"||status.voiceTransport==="codex-realtime"
     ? createCodexVoiceProvider({connect:createCodexLocalConnector(status.wsUrl)})
     : id==="claude"?createClaudeVoiceProvider({url:status.wsUrl}):id==="hermes"?createHermesVoiceProvider({url:status.wsUrl}):createOpenClawVoiceProvider({url:status.wsUrl});
-   const call=createAgentHuddle({provider,openAudio:openWebAudio});
+   const call=createAgentHuddle({provider,openAudio:directCall?openDirectCallAudio:openWebAudio});
    huddle=call;
    let previousState=call.snapshot();
    off=call.subscribe(()=>{
@@ -162,7 +189,7 @@ async function choose(id){
    });
   }
  }catch(error){if(token===generation&&!signal.aborted)element("setup").textContent=error.message;}
- if(token===generation)render();
+ if(token===generation){checked=true;render();}
 }
 element("provider").onchange=()=>{void choose(element("provider").value);};
 element("openclaw-mode").onchange=()=>{
@@ -250,7 +277,24 @@ element("login").onclick=async()=>{
  }catch(error){if(selected==="claude")element("setup").textContent=error.message;}
  finally{loggingIn=false;render();}
 };
-element("start").onclick=()=>{maskSecret();render();void huddle?.start();};
+async function startCall(){
+ if(directCall&&!ready)await choose("openclaw");
+ if(!ready)return;
+ speakerMuted=false;
+ maskSecret();render();await huddle?.start();
+}
+element("start").onclick=()=>{void startCall();};
+element("resume-audio").onclick=()=>{void resumeAudio?.().catch(()=>{});};
+element("speaker").onclick=()=>{
+ speakerMuted=!speakerMuted;if(speakerMuted)clearOutput?.();
+ render();
+};
+element("toggle-transcript").onclick=()=>{
+ const toggle=element("toggle-transcript");
+ const open=toggle.getAttribute("aria-expanded")!=="true";
+ toggle.setAttribute("aria-expanded",String(open));
+ element("call-layout").dataset.transcriptOpen=String(open);
+};
 element("mute").onclick=()=>huddle?.mute();
 element("interrupt").onclick=()=>{void huddle?.interrupt();};
 element("stop").onclick=async()=>{
@@ -261,4 +305,8 @@ window.addEventListener("pagehide",()=>{clearInterval(clock);maskSecret();genera
 try{selected=Object.hasOwn(names,localStorage.getItem("huddle-ai"))?localStorage.getItem("huddle-ai"):"codex";}catch{}
 try{const savedMode=localStorage.getItem("huddle-openclaw-mode");if(["remote","remote-realtime"].includes(savedMode))remoteMode=savedMode;element("remote-url").value=localStorage.getItem("huddle-openclaw-url")??"";}catch{}
 element("openclaw-mode").value=remoteMode;
-void choose(selected);
+if(directCall||new URLSearchParams(location.search).get("openclaw")==="remote"){
+ selected="openclaw";remoteMode="remote";element("openclaw-mode").value=remoteMode;
+}
+if(directCall)element("call-actions").append(element("mute"));
+void choose(selected).then(()=>{if(directCall&&ready&&!document.hidden)void startCall();});
